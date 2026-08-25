@@ -5,6 +5,7 @@
 // deps: bun add hono @supabase/supabase-js promptpay-qr qrcode
 // =============================================================
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createClient } from "@supabase/supabase-js";
 import { createHmac, timingSafeEqual, createHash } from "node:crypto";
 import {
@@ -32,6 +33,12 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const app = new Hono();
+
+app.use("*", cors({
+  origin: ["https://medmove-liff.pages.dev"],
+  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+}));
 
 // ---------- LINE helpers ----------
 function verifyLineSignature(body: string, signature: string | undefined): boolean {
