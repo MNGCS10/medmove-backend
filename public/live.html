@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ติดตามรถ — MedMove</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --teal: #0E5A54; --ok: #1F9E7A; --dest: #D64545; --amber: #E08A1E;
+      --surface: #F2F5F4; --card: #fff; --ink: #16302E; --muted: #5E7370; --line: #DCE5E2;
+      --shadow: 0 -2px 16px rgba(14,90,84,.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; font-family: "IBM Plex Sans Thai", system-ui, sans-serif; color: var(--ink); }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    #map { position: fixed; inset: 0; background: #E3EAE8; }
+
+    /* status banner (top) */
+    .banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 14px 18px calc(14px); color: #fff; display: flex; align-items: center; gap: 12px;
+      background: var(--teal); transition: background .3s;
+    }
+    .banner.near { background: var(--amber); }
+    .banner.arrived { background: var(--ok); }
+    .banner .pulse { width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,.6); animation: pulse 1.6s infinite; flex: none; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.6); } 70% { box-shadow: 0 0 0 12px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+    .banner .t b { font-size: 15px; font-weight: 600; display: block; }
+    .banner .t small { font-size: 12px; opacity: .85; }
+
+    /* driver card (bottom sheet) */
+    .sheet {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+      background: var(--card); border-radius: 18px 18px 0 0; box-shadow: var(--shadow);
+      padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+    }
+    .sheet .grip { width: 40px; height: 4px; border-radius: 3px; background: var(--line); margin: 0 auto 14px; }
+    .driver { display: flex; align-items: center; gap: 14px; }
+    .driver .ava { width: 48px; height: 48px; border-radius: 50%; background: #EAF7F2; display: grid; place-items: center; font-size: 24px; flex: none; }
+    .driver .info { flex: 1; }
+    .driver .info b { font-size: 16px; font-weight: 600; }
+    .driver .info small { display: block; color: var(--muted); font-size: 13px; }
+    .driver .eta { text-align: right; }
+    .driver .eta .v { font-size: 20px; font-weight: 600; color: var(--teal); }
+    .driver .eta .k { font-size: 11px; color: var(--muted); }
+    .stats { display: flex; gap: 10px; margin-top: 14px; }
+    .stat { flex: 1; background: var(--surface); border-radius: 12px; padding: 10px 12px; text-align: center; }
+    .stat .v { font-size: 16px; font-weight: 600; }
+    .stat .k { font-size: 11px; color: var(--muted); }
+
+    .loading { position: fixed; inset: 0; z-index: 50; background: var(--surface); display: grid; place-items: center; }
+    .loading.hidden { display: none; }
+    .spinner { width: 42px; height: 42px; border: 4px solid var(--line); border-top-color: var(--teal); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .pulse, .spinner { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="banner" id="banner">
+    <span class="pulse"></span>
+    <div class="t"><b id="bannerTitle">กำลังเชื่อมต่อ…</b><small id="bannerSub">ติดตามตำแหน่งรถแบบเรียลไทม์</small></div>
+  </div>
+
+  <div class="sheet" id="sheet" style="display:none;">
+    <div class="grip"></div>
+    <div class="driver">
+      <div class="ava">🧑‍✈️</div>
+      <div class="info"><b id="driverName">—</b><small id="vehiclePlate">—</small></div>
+      <div class="eta"><div class="v mono" id="etaVal">—</div><div class="k">ถึงใน</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v mono" id="distVal">—</div><div class="k">ระยะห่าง (กม.)</div></div>
+      <div class="stat"><div class="v" id="statusVal">—</div><div class="k">สถานะ</div></div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><div class="spinner"></div></div>
+
+  <script>
+    // ▼▼▼ กรอกตอน deploy ▼▼▼
+    const CONFIG = {
+      LIFF_ID: "0000000000-xxxxxxxx",
+      GOOGLE_MAPS_KEY: "YOUR_GOOGLE_MAPS_BROWSER_KEY",
+      BACKEND_URL: "https://your-backend.example",
+      POLL_MS: 5000,
+    };
+    // ▲▲▲
+
+    const $ = (id) => document.getElementById(id);
+    const bookingId = new URLSearchParams(location.search).get("bookingId") || "";
+    let map, pickupMarker, driverMarker, routeLine, pollTimer, firstFix = true;
+
+    window.initMap = function () {
+      map = new google.maps.Map($("map"), {
+        center: { lat: 13.7563, lng: 100.5018 }, zoom: 13,
+        disableDefaultUI: true, gestureHandling: "greedy", clickableIcons: false,
+      });
+      startTracking();
+    };
+
+    function markerIcon(color) {
+      return { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: color, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 };
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/track-status?bookingId=${bookingId}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        // d: { status, driver:{lat,lng,name,plate}, pickup:{lat,lng}, distToPickupKm, etaText }
+        $("loading").classList.add("hidden");
+        $("sheet").style.display = "block";
+
+        // pickup marker
+        if (d.pickup && !pickupMarker) {
+          pickupMarker = new google.maps.Marker({
+            position: d.pickup, map, label: { text: "รับ", color: "#fff", fontSize: "10px", fontWeight: "700" },
+            icon: markerIcon("#D64545"),
+          });
+        }
+
+        // driver marker
+        if (d.driver && d.driver.lat != null) {
+          const pos = { lat: d.driver.lat, lng: d.driver.lng };
+          if (!driverMarker) driverMarker = new google.maps.Marker({ position: pos, map, icon: markerIcon("#0E5A54") });
+          else driverMarker.setPosition(pos);
+
+          if (d.pickup) {
+            const path = [pos, d.pickup];
+            if (!routeLine) routeLine = new google.maps.Polyline({ path, map, strokeColor: "#0E5A54", strokeOpacity: .7, strokeWeight: 4 });
+            else routeLine.setPath(path);
+            if (firstFix) {
+              const b = new google.maps.LatLngBounds(); b.extend(pos); b.extend(d.pickup);
+              map.fitBounds(b, 80); firstFix = false;
+            }
+          }
+          $("driverName").textContent = d.driver.name || "คนขับ";
+          $("vehiclePlate").textContent = d.driver.plate || "-";
+        }
+
+        // stats + banner
+        $("distVal").textContent = d.distToPickupKm != null ? Number(d.distToPickupKm).toFixed(1) : "—";
+        $("etaVal").textContent = d.etaText || "—";
+        updateBanner(d.status, d.distToPickupKm);
+
+        if (d.status === "arrived" || d.status === "completed") stop();
+      } catch (e) { /* เงียบ ๆ ลอง poll รอบหน้า */ }
+    }
+
+    function updateBanner(status, dist) {
+      const b = $("banner");
+      b.classList.remove("near", "arrived");
+      let title = "รถกำลังเดินทางมารับ", sub = "ติดตามตำแหน่งแบบเรียลไทม์", st = "กำลังมา";
+      if (status === "arrived" || status === "completed") { b.classList.add("arrived"); title = "รถถึงจุดรับแล้ว"; sub = "กรุณาเตรียมพร้อม"; st = "ถึงแล้ว"; }
+      else if (dist != null && dist <= 1) { b.classList.add("near"); title = "รถใกล้ถึงแล้ว"; sub = "น้อยกว่า 1 กิโลเมตร"; st = "ใกล้ถึง"; }
+      $("bannerTitle").textContent = title; $("bannerSub").textContent = sub; $("statusVal").textContent = st;
+    }
+
+    function startTracking() { poll(); pollTimer = setInterval(poll, CONFIG.POLL_MS); }
+    function stop() { if (pollTimer) clearInterval(pollTimer); }
+
+    (async () => {
+      try { await liff.init({ liffId: CONFIG.LIFF_ID }); if (!liff.isLoggedIn()) liff.login(); }
+      catch (e) { console.warn("LIFF dev mode", e); }
+      const s = document.createElement("script");
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_KEY}&callback=initMap&language=th&region=TH`;
+      s.async = true; document.head.appendChild(s);
+    })();
+  </script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</body>
+</html>

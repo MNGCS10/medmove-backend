@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>คนขับ — MedMove</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --teal: #0E5A54; --teal-dark: #0A4641; --ok: #1F9E7A; --dest: #D64545; --amber: #E08A1E;
+      --surface: #F2F5F4; --card: #fff; --ink: #16302E; --muted: #5E7370; --line: #DCE5E2;
+      --shadow: 0 2px 12px rgba(14,90,84,.08); --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { font-family: "IBM Plex Sans Thai", system-ui, sans-serif; background: var(--surface); color: var(--ink); font-size: 16px; line-height: 1.5; }
+    body { min-height: 100vh; }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    header { background: var(--teal); color: #fff; padding: 16px 18px; display: flex; align-items: center; gap: 10px; }
+    header .logo { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.16); display: grid; place-items: center; font-size: 19px; }
+    header h1 { font-size: 17px; font-weight: 600; }
+    header .who { margin-left: auto; font-size: 12.5px; opacity: .85; }
+    .wrap { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+    .empty .ic { font-size: 40px; }
+
+    .job { border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+    .job.active { border-color: var(--teal); background: #F7FAF9; }
+    .job .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 20px; margin-bottom: 8px; }
+    .job .badge.dispatched { background: #FFF4E2; color: var(--amber); }
+    .job .badge.en_route { background: #EAF7F2; color: var(--ok); }
+    .job .line { display: flex; gap: 9px; align-items: flex-start; padding: 3px 0; font-size: 14px; }
+    .job .line .pin { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; }
+    .job .line .pin.o { background: var(--ok); } .job .line .pin.d { background: var(--dest); }
+
+    .track-status { display: flex; gap: 10px; margin: 12px 0; }
+    .tstat { flex: 1; background: var(--surface); border-radius: 11px; padding: 9px; text-align: center; }
+    .tstat .v { font-size: 16px; font-weight: 600; } .tstat .k { font-size: 11px; color: var(--muted); }
+    .live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--dest); margin-right: 6px; }
+    .live-dot.on { background: var(--ok); animation: blink 1.4s infinite; }
+    @keyframes blink { 50% { opacity: .3; } }
+
+    .btn { width: 100%; border: none; border-radius: 12px; padding: 15px; font-family: inherit; font-size: 15.5px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+    .btn-primary { background: var(--teal); color: #fff; } .btn-primary:active { background: var(--teal-dark); }
+    .btn-ok { background: var(--ok); color: #fff; }
+    .btn-danger { background: var(--dest); color: #fff; }
+    .btn-ghost { background: #fff; border: 1.5px solid var(--line); color: var(--ink); }
+    .btn:disabled { opacity: .45; }
+    .call { text-decoration: none; }
+
+    .toast { position: fixed; left: 16px; right: 16px; bottom: 20px; z-index: 200; background: var(--ink); color: #fff; padding: 13px 16px; border-radius: 12px; font-size: 14px; text-align: center; opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">🧑‍✈️</div><h1>คนขับ MedMove</h1>
+    <div class="who" id="who">—</div>
+  </header>
+
+  <div class="wrap" id="wrap">
+    <div class="card"><div class="empty"><div class="ic">⏳</div><p>กำลังโหลดงาน…</p></div></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ▼▼▼ กรอกตอน deploy ▼▼▼
+    const CONFIG = { LIFF_ID: "0000000000-xxxxxxxx", BACKEND_URL: "https://your-backend.example" };
+    // driverId: ส่งผ่าน ?driverId=... (ลิงก์ประจำตัวคนขับ) หรือเก็บใน localStorage
+    // ▲▲▲
+
+    const $ = (id) => document.getElementById(id);
+    const driverId = new URLSearchParams(location.search).get("driverId")
+      || localStorage.getItem("mm_driverId") || "";
+    if (driverId) localStorage.setItem("mm_driverId", driverId);
+
+    const track = {
+      bookingId: null, watchId: null, pending: [], lastKept: null,
+      pointCount: 0, distanceKm: 0, sending: false,
+    };
+
+    function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+    function haversineKm(a, b, c, d) {
+      const R = 6371, r = (x) => x * Math.PI / 180;
+      const dLat = r(c - a), dLon = r(d - b);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    async function loadJobs() {
+      if (!driverId) { renderNoDriver(); return; }
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/driver/active?driverId=${driverId}`);
+        const jobs = await res.json();
+        renderJobs(jobs);
+      } catch (e) { $("wrap").innerHTML = card(`<div class="empty"><div class="ic">⚠️</div><p>โหลดงานไม่สำเร็จ<br>ลองใหม่อีกครั้ง</p></div>`); }
+    }
+    const card = (inner) => `<div class="card">${inner}</div>`;
+
+    function renderNoDriver() {
+      $("wrap").innerHTML = card(`<div class="empty"><div class="ic">🔑</div><p>ไม่พบรหัสคนขับ<br><small>ใช้ลิงก์ประจำตัวที่มี ?driverId=</small></p></div>`);
+    }
+
+    function renderJobs(jobs) {
+      if (!jobs || !jobs.length) {
+        $("wrap").innerHTML = card(`<div class="empty"><div class="ic">✅</div><p>ยังไม่มีงานที่ได้รับมอบหมาย</p></div>`);
+        return;
+      }
+      const active = jobs.find((j) => j.id === track.bookingId) || jobs[0];
+      $("wrap").innerHTML = jobs.map((j) => jobCard(j, j.id === active.id)).join("")
+        + card(jobDetail(active));
+      bindDetail(active);
+    }
+
+    function jobCard(j, isActive) {
+      return `<div class="card job ${isActive ? "active" : ""}" onclick="selectJob('${j.id}')">
+        <span class="badge ${j.status}">${j.status === "en_route" ? "กำลังเดินทาง" : "รอออกรถ"}</span>
+        <div class="line"><span class="pin o"></span><div>${j.origin_address || "จุดรับ"}</div></div>
+        <div class="line"><span class="pin d"></span><div>${j.destination_address || "ปลายทาง"}</div></div>
+      </div>`;
+    }
+
+    function jobDetail(j) {
+      const tracking = track.bookingId === j.id && track.watchId != null;
+      return `<div class="eyebrow">งานปัจจุบัน</div>
+        <div style="font-size:14px;margin-bottom:4px"><b>${j.customer_name || "ลูกค้า"}</b></div>
+        ${j.contact_phone ? `<a class="call btn btn-ghost" href="tel:${j.contact_phone}">📞 โทรหาลูกค้า ${j.contact_phone}</a>` : ""}
+        <div class="track-status">
+          <div class="tstat"><div class="v"><span class="live-dot ${tracking ? "on" : ""}"></span>${tracking ? "กำลังส่ง" : "หยุด"}</div><div class="k">GPS</div></div>
+          <div class="tstat"><div class="v mono" id="ptCount">${track.pointCount}</div><div class="k">จุดที่ส่ง</div></div>
+          <div class="tstat"><div class="v mono" id="distKm">${track.distanceKm.toFixed(1)}</div><div class="k">ระยะ (กม.)</div></div>
+        </div>
+        ${tracking
+          ? `<button class="btn btn-ok" id="btnArrived">✅ ถึงจุดรับแล้ว</button>
+             <button class="btn btn-danger" id="btnComplete">🏁 จบงาน (ส่งถึงแล้ว)</button>`
+          : `<button class="btn btn-primary" id="btnStart">🚗 เริ่มเดินทาง + ส่งตำแหน่ง</button>`}`;
+    }
+
+    window.selectJob = (id) => { track.bookingId = id; loadJobs(); };
+
+    function bindDetail(j) {
+      const start = $("btnStart"), arr = $("btnArrived"), comp = $("btnComplete");
+      if (start) start.onclick = () => startTracking(j.id);
+      if (arr) arr.onclick = () => driverAction("arrived", j.id);
+      if (comp) comp.onclick = () => { if (confirm("ยืนยันจบงาน? ระบบจะหยุดส่งตำแหน่ง")) driverAction("complete", j.id); };
+    }
+
+    // ---------- GPS tracking (reuse pattern จากไฟล์ GPS เดิม) ----------
+    function startTracking(bookingId) {
+      if (!navigator.geolocation) return toast("อุปกรณ์ไม่รองรับ GPS");
+      track.bookingId = bookingId; track.pointCount = 0; track.distanceKm = 0; track.lastKept = null;
+      localStorage.setItem("mm_activeBooking", bookingId);
+      track.watchId = navigator.geolocation.watchPosition(onPosition, onGeoError, {
+        enableHighAccuracy: true, maximumAge: 5000, timeout: 15000,
+      });
+      toast("เริ่มส่งตำแหน่งแล้ว");
+      loadJobs();
+    }
+
+    function onPosition(pos) {
+      const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
+      const now = Date.now();
+      // dedupe: เก็บเมื่อขยับ >8ม. หรือผ่านไป >20วิ
+      if (track.lastKept) {
+        const moved = haversineKm(track.lastKept.lat, track.lastKept.lng, lat, lng) * 1000;
+        const dt = now - track.lastKept.t;
+        if (moved < 8 && dt < 20000) return;
+        if (moved < 5000) track.distanceKm += moved / 1000; // กัน GPS jump >5กม.
+      }
+      track.lastKept = { lat, lng, t: now };
+      track.pending.push({ lat, lng, accuracy, speed: speed || 0 });
+      flush();
+      if ($("ptCount")) $("ptCount").textContent = ++track.pointCount;
+      if ($("distKm")) $("distKm").textContent = track.distanceKm.toFixed(1);
+    }
+
+    async function flush() {
+      if (track.sending || !track.pending.length) return;
+      track.sending = true;
+      const pt = track.pending[0];
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/track`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: track.bookingId, ...pt }),
+        });
+        if (!res.ok) throw new Error();
+        track.pending.shift();             // สำเร็จ -> เอาออกจากคิว
+      } catch (e) { /* ล้มเหลว -> คงไว้ในคิว ลองใหม่รอบหน้า */ }
+      finally { track.sending = false; if (track.pending.length) setTimeout(flush, 1500); }
+    }
+
+    function onGeoError() { toast("เข้าถึง GPS ไม่ได้ — เปิด Location แล้วลองใหม่"); }
+
+    async function driverAction(action, bookingId) {
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/driver/${action}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId, driverId }),
+        });
+        if (!res.ok) throw new Error();
+        if (action === "complete") stopTracking();
+        toast(action === "arrived" ? "แจ้งถึงจุดรับแล้ว" : "จบงานเรียบร้อย");
+        loadJobs();
+      } catch (e) { toast("ทำรายการไม่สำเร็จ"); }
+    }
+
+    function stopTracking() {
+      if (track.watchId != null) navigator.geolocation.clearWatch(track.watchId);
+      track.watchId = null; track.bookingId = null;
+      localStorage.removeItem("mm_activeBooking");
+    }
+
+    // ---------- boot ----------
+    (async () => {
+      try { await liff.init({ liffId: CONFIG.LIFF_ID }); if (!liff.isLoggedIn()) liff.login();
+        const p = await liff.getProfile(); $("who").textContent = p.displayName;
+      } catch (e) { $("who").textContent = "โหมดทดสอบ"; }
+      // กู้คืนงานที่กำลังติดตามหลังรีเฟรช
+      const resume = localStorage.getItem("mm_activeBooking");
+      if (resume) track.bookingId = resume;
+      loadJobs();
+    })();
+  </script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</body>
+</html>

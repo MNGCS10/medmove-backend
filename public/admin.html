@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedMove — แผงควบคุมเจ้าของรถ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --teal: #0E5A54; --teal-dark: #0A4641; --ok: #1F9E7A; --dest: #D64545; --amber: #E08A1E;
+      --surface: #F2F5F4; --card: #fff; --ink: #16302E; --muted: #5E7370; --line: #DCE5E2;
+      --shadow: 0 2px 12px rgba(14,90,84,.08); --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { font-family: "IBM Plex Sans Thai", system-ui, sans-serif; background: var(--surface); color: var(--ink); font-size: 15px; line-height: 1.5; }
+    .mono { font-family: "IBM Plex Mono", monospace; font-feature-settings: "tnum"; }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ---------- Login ---------- */
+    .login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+    .login .box { background: #fff; border-radius: 18px; box-shadow: var(--shadow); padding: 32px 26px; width: 100%; max-width: 380px; }
+    .login .logo { font-size: 40px; text-align: center; }
+    .login h1 { font-size: 20px; font-weight: 700; text-align: center; margin: 8px 0 4px; }
+    .login p { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+    .login input { width: 100%; border: 1.5px solid var(--line); border-radius: 11px; padding: 13px; font-family: inherit; font-size: 15px; margin-bottom: 12px; outline: none; }
+    .login input:focus { border-color: var(--teal); }
+    .login .err { color: var(--dest); font-size: 13px; margin-bottom: 10px; min-height: 18px; }
+
+    /* ---------- Shell ---------- */
+    .shell { display: none; }
+    header { background: var(--teal); color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 30; }
+    header .logo { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.16); display: grid; place-items: center; font-size: 19px; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    header .sub { font-size: 12px; opacity: .82; }
+    header .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; }
+    header .right button { background: rgba(255,255,255,.16); color: #fff; border: none; border-radius: 9px; padding: 8px 12px; font-size: 13px; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 18px; }
+
+    /* ---------- Stats ---------- */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .stat { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px; }
+    .stat .v { font-size: 26px; font-weight: 600; }
+    .stat .k { font-size: 12px; color: var(--muted); }
+    .stat.hi .v { color: var(--amber); }
+
+    /* ---------- Tabs ---------- */
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tabs button { background: #fff; border: 1.5px solid var(--line); border-radius: 11px; padding: 9px 16px; font-size: 14px; font-weight: 500; color: var(--muted); }
+    .tabs button.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ---------- Filters ---------- */
+    .filters { display: flex; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; }
+    .filters button { background: #fff; border: 1.5px solid var(--line); border-radius: 20px; padding: 6px 14px; font-size: 13px; color: var(--muted); }
+    .filters button.active { background: #EAF7F2; border-color: var(--teal); color: var(--teal); font-weight: 600; }
+
+    /* ---------- Booking cards ---------- */
+    .booking { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 12px; }
+    .booking .top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .booking .cust { font-weight: 600; }
+    .booking .code { font-size: 11px; color: var(--muted); }
+    .badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
+    .b-pending_confirm { background: #EEF1F0; color: var(--muted); }
+    .b-awaiting_payment { background: #FFF4E2; color: var(--amber); }
+    .b-paid { background: #E4F1FF; color: #2E6FB0; }
+    .b-dispatched, .b-en_route, .b-arrived { background: #EAF7F2; color: var(--ok); }
+    .b-completed { background: #EEF1F0; color: var(--muted); }
+    .b-cancelled, .b-rejected { background: #FDECEC; color: var(--dest); }
+    .booking .route { font-size: 13.5px; }
+    .booking .route .r { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; }
+    .booking .route .pin { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: none; }
+    .booking .route .pin.o { background: var(--ok); } .booking .route .pin.d { background: var(--dest); }
+    .booking .meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 8px 0; }
+    .booking .meta b { color: var(--ink); }
+    .booking .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .btn { border: none; border-radius: 10px; padding: 9px 14px; font-size: 13.5px; font-weight: 600; }
+    .btn-primary { background: var(--teal); color: #fff; }
+    .btn-ok { background: var(--ok); color: #fff; }
+    .btn-danger { background: #fff; border: 1.5px solid var(--dest); color: var(--dest); }
+    .btn-ghost { background: #fff; border: 1.5px solid var(--line); color: var(--ink); }
+    .empty { text-align: center; color: var(--muted); padding: 40px; }
+
+    /* ---------- Drivers ---------- */
+    .driver-row { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; }
+    .driver-row .ava { width: 42px; height: 42px; border-radius: 50%; background: #EAF7F2; display: grid; place-items: center; font-size: 20px; }
+    .driver-row .info b { font-size: 15px; } .driver-row .info small { display: block; color: var(--muted); font-size: 12.5px; }
+    .dstatus { margin-left: auto; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+    .d-available { background: #EAF7F2; color: var(--ok); }
+    .d-on_trip { background: #FFF4E2; color: var(--amber); }
+    .d-offline { background: #EEF1F0; color: var(--muted); }
+
+    #adminMap { width: 100%; height: 62vh; border-radius: var(--radius); box-shadow: var(--shadow); background: #E3EAE8; }
+
+    /* ---------- Modal ---------- */
+    .modal { position: fixed; inset: 0; z-index: 50; background: rgba(22,48,46,.5); display: none; align-items: center; justify-content: center; padding: 20px; }
+    .modal.show { display: flex; }
+    .modal .panel { background: #fff; border-radius: 16px; max-width: 420px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 22px; }
+    .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 14px; }
+    .modal img { width: 100%; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 14px; }
+    .modal select { width: 100%; border: 1.5px solid var(--line); border-radius: 11px; padding: 12px; font-family: inherit; font-size: 15px; margin-bottom: 14px; }
+    .modal .row { display: flex; gap: 10px; }
+    .modal .row .btn { flex: 1; text-align: center; }
+
+    .toast { position: fixed; left: 50%; transform: translateX(-50%) translateY(10px); bottom: 24px; z-index: 100; background: var(--ink); color: #fff; padding: 13px 20px; border-radius: 12px; font-size: 14px; opacity: 0; transition: .2s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+
+  <!-- ========== LOGIN ========== -->
+  <div class="login" id="loginScreen">
+    <div class="box">
+      <div class="logo">🚑</div>
+      <h1>MedMove Admin</h1>
+      <p>แผงควบคุมสำหรับเจ้าของรถ</p>
+      <input type="email" id="email" placeholder="อีเมล" autocomplete="username" />
+      <input type="password" id="password" placeholder="รหัสผ่าน" autocomplete="current-password" />
+      <div class="err" id="loginErr"></div>
+      <button class="btn btn-primary" id="loginBtn" style="width:100%;padding:14px">เข้าสู่ระบบ</button>
+    </div>
+  </div>
+
+  <!-- ========== APP ========== -->
+  <div class="shell" id="shell">
+    <header>
+      <div class="logo">🚑</div>
+      <div><h1>MedMove</h1><div class="sub" id="tenantName">—</div></div>
+      <div class="right"><span id="userEmail"></span><button id="logoutBtn">ออก</button></div>
+    </header>
+
+    <div class="container">
+      <div class="stats" id="stats"></div>
+
+      <div class="tabs">
+        <button class="active" data-view="bookings">📋 รายการจอง</button>
+        <button data-view="map">🗺️ แผนที่รวม</button>
+        <button data-view="drivers">🧑‍✈️ คนขับ</button>
+      </div>
+
+      <!-- Bookings -->
+      <div class="view active" id="view-bookings">
+        <div class="filters" id="filters">
+          <button class="active" data-f="active">กำลังดำเนินการ</button>
+          <button data-f="awaiting_payment">รอชำระ/สลิป</button>
+          <button data-f="paid">รอจ่ายงาน</button>
+          <button data-f="on_road">กำลังเดินทาง</button>
+          <button data-f="all">ทั้งหมด</button>
+        </div>
+        <div id="bookingList"><div class="empty">กำลังโหลด…</div></div>
+      </div>
+
+      <!-- Map -->
+      <div class="view" id="view-map"><div id="adminMap"></div></div>
+
+      <!-- Drivers -->
+      <div class="view" id="view-drivers"><div id="driverList"><div class="empty">กำลังโหลด…</div></div></div>
+    </div>
+  </div>
+
+  <!-- Slip modal -->
+  <div class="modal" id="slipModal">
+    <div class="panel">
+      <h3>ตรวจสอบสลิป</h3>
+      <img id="slipImg" src="" alt="สลิป" />
+      <div id="slipInfo" style="font-size:14px;margin-bottom:14px"></div>
+      <div class="row">
+        <button class="btn btn-ok" id="slipApprove">✅ อนุมัติ</button>
+        <button class="btn btn-danger" id="slipReject">ปฏิเสธ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dispatch modal -->
+  <div class="modal" id="dispatchModal">
+    <div class="panel">
+      <h3>จ่ายงานให้คนขับ</h3>
+      <select id="driverSelect"></select>
+      <div class="row">
+        <button class="btn btn-ghost" onclick="closeModal('dispatchModal')">ยกเลิก</button>
+        <button class="btn btn-primary" id="dispatchConfirm">จ่ายงาน</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ▼▼▼ กรอกตอน deploy ▼▼▼
+    const CONFIG = {
+      SUPABASE_URL: "https://<PROJECT_REF>.supabase.co",
+      SUPABASE_ANON_KEY: "YOUR_ANON_KEY",
+      BACKEND_URL: "https://your-backend.example",
+      GOOGLE_MAPS_KEY: "YOUR_GOOGLE_MAPS_BROWSER_KEY",
+    };
+    // ▲▲▲
+
+    const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    const $ = (id) => document.getElementById(id);
+    const app = { tenantId: null, userId: null, filter: "active", bookings: [], drivers: [], map: null, driverMarkers: {} };
+
+    function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+    const bkkTime = (d) => d ? new Date(d).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : "—";
+    const baht = (n) => Number(n).toLocaleString("th-TH");
+
+    // ---------- Auth ----------
+    $("loginBtn").addEventListener("click", login);
+    $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+    async function login() {
+      $("loginErr").textContent = "";
+      const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+      if (error) { $("loginErr").textContent = "เข้าสู่ระบบไม่สำเร็จ ตรวจอีเมล/รหัสผ่าน"; return; }
+      boot();
+    }
+    $("logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+
+    async function boot() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { $("loginScreen").style.display = "grid"; $("shell").style.display = "none"; return; }
+      app.userId = session.user.id;
+      $("userEmail").textContent = session.user.email;
+
+      // หา tenant ของ user (RLS อนุญาตอ่าน membership ตัวเอง)
+      const { data: mem } = await sb.from("tenant_members").select("tenant_id").limit(1).maybeSingle();
+      if (!mem) { toast("บัญชีนี้ยังไม่ผูกกับหน่วยงาน"); return; }
+      app.tenantId = mem.tenant_id;
+      const { data: t } = await sb.from("tenants").select("name").eq("id", app.tenantId).single();
+      $("tenantName").textContent = t?.name || "";
+
+      $("loginScreen").style.display = "none"; $("shell").style.display = "block";
+      await Promise.all([loadBookings(), loadDrivers()]);
+      subscribeRealtime();
+    }
+
+    // ---------- Data ----------
+    async function loadBookings() {
+      const { data } = await sb.from("bookings")
+        .select("*, customers(display_name, phone_number), drivers(name, vehicle_plate), payments(id, verification_status, slip_image_url, amount)")
+        .eq("tenant_id", app.tenantId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      app.bookings = data || [];
+      renderStats(); renderBookings();
+    }
+    async function loadDrivers() {
+      const { data } = await sb.from("drivers").select("*").eq("tenant_id", app.tenantId).order("name");
+      app.drivers = data || [];
+      renderDrivers(); renderMapMarkers();
+    }
+
+    // ---------- Stats ----------
+    function renderStats() {
+      const today = new Date().toDateString();
+      const b = app.bookings;
+      const isToday = (x) => new Date(x.created_at).toDateString() === today;
+      const c = {
+        today: b.filter(isToday).length,
+        awaiting: b.filter((x) => x.status === "awaiting_payment").length,
+        paid: b.filter((x) => x.status === "paid").length,
+        onroad: b.filter((x) => ["dispatched", "en_route", "arrived"].includes(x.status)).length,
+        done: b.filter((x) => x.status === "completed" && isToday(x)).length,
+      };
+      $("stats").innerHTML = `
+        <div class="stat"><div class="v mono">${c.today}</div><div class="k">จองวันนี้</div></div>
+        <div class="stat hi"><div class="v mono">${c.awaiting}</div><div class="k">รอชำระ/สลิป</div></div>
+        <div class="stat"><div class="v mono">${c.paid}</div><div class="k">รอจ่ายงาน</div></div>
+        <div class="stat"><div class="v mono">${c.onroad}</div><div class="k">กำลังเดินทาง</div></div>
+        <div class="stat"><div class="v mono">${c.done}</div><div class="k">เสร็จวันนี้</div></div>`;
+    }
+
+    // ---------- Bookings ----------
+    document.querySelectorAll("#filters button").forEach((b) => b.addEventListener("click", () => {
+      document.querySelectorAll("#filters button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active"); app.filter = b.dataset.f; renderBookings();
+    }));
+
+    function filtered() {
+      const f = app.filter;
+      return app.bookings.filter((b) => {
+        if (f === "all") return true;
+        if (f === "active") return !["completed", "cancelled", "rejected"].includes(b.status);
+        if (f === "on_road") return ["dispatched", "en_route", "arrived"].includes(b.status);
+        return b.status === f;
+      });
+    }
+
+    const STATUS_TH = { pending_confirm: "รอลูกค้ายืนยัน", awaiting_payment: "รอชำระ/สลิป", paid: "รอจ่ายงาน", dispatched: "จ่ายงานแล้ว", en_route: "กำลังไปรับ", arrived: "ถึงจุดรับ", completed: "เสร็จสิ้น", cancelled: "ยกเลิก", rejected: "ปฏิเสธ" };
+
+    function renderBookings() {
+      const list = filtered();
+      if (!list.length) { $("bookingList").innerHTML = `<div class="empty">ไม่มีรายการในหมวดนี้</div>`; return; }
+      $("bookingList").innerHTML = list.map(cardHtml).join("");
+      list.forEach(bindCard);
+    }
+
+    function cardHtml(b) {
+      const pendingSlip = (b.payments || []).find((p) => p.verification_status === "pending");
+      let acts = "";
+      if (b.status === "awaiting_payment" && pendingSlip) acts = `<button class="btn btn-ok" data-act="slip" data-id="${b.id}">🧾 ตรวจสลิป</button>`;
+      else if (b.status === "paid") acts = `<button class="btn btn-primary" data-act="dispatch" data-id="${b.id}">🚗 จ่ายงาน</button>`;
+      else if (["dispatched", "en_route", "arrived"].includes(b.status)) acts = `<button class="btn btn-ghost" data-act="map" data-id="${b.id}">🗺️ ดูแผนที่</button>`;
+      const canCancel = !["completed", "cancelled", "rejected"].includes(b.status);
+      if (canCancel) acts += `<button class="btn btn-danger" data-act="cancel" data-id="${b.id}">ยกเลิก</button>`;
+
+      return `<div class="booking">
+        <div class="top">
+          <div><div class="cust">${b.customers?.display_name || "ลูกค้า"}</div><div class="code mono">#${b.id.slice(0,8)}</div></div>
+          <span class="badge b-${b.status}">${STATUS_TH[b.status] || b.status}${b.is_emergency ? " 🚨" : ""}</span>
+        </div>
+        <div class="route">
+          <div class="r"><span class="pin o"></span><div>${b.origin_address || "—"}</div></div>
+          <div class="r"><span class="pin d"></span><div>${b.destination_address || "—"}</div></div>
+        </div>
+        <div class="meta">
+          <span>📅 <b>${b.scheduled_at ? bkkTime(b.scheduled_at) : "ทันที"}</b></span>
+          <span>📏 <b>${Number(b.distance_km).toFixed(1)} กม.</b></span>
+          <span>💰 <b>${baht(b.price_calculated)} ฿</b></span>
+          ${b.contact_phone ? `<span>📞 <b>${b.contact_phone}</b></span>` : ""}
+          ${b.drivers ? `<span>🧑‍✈️ <b>${b.drivers.name}</b></span>` : ""}
+        </div>
+        <div class="acts">${acts || '<span style="color:var(--muted);font-size:13px">—</span>'}</div>
+      </div>`;
+    }
+
+    function bindCard(b) {
+      document.querySelectorAll(`[data-id="${b.id}"]`).forEach((el) => {
+        el.onclick = () => {
+          const act = el.dataset.act;
+          if (act === "slip") openSlip(b);
+          else if (act === "dispatch") openDispatch(b);
+          else if (act === "cancel") cancelBooking(b);
+          else if (act === "map") { switchView("map"); if (b.drivers) toast(`คนขับ: ${b.drivers.name}`); }
+        };
+      });
+    }
+
+    // ---------- Slip verify ----------
+    let currentSlipBooking = null;
+    async function openSlip(b) {
+      currentSlipBooking = b;
+      const pay = (b.payments || []).find((p) => p.verification_status === "pending");
+      $("slipInfo").innerHTML = `ยอด <b>${baht(b.price_calculated)} บาท</b> · ${b.customers?.display_name || ""}`;
+      $("slipImg").src = "";
+      if (pay?.slip_image_url) {
+        const { data } = await sb.storage.from("payment-slips").createSignedUrl(pay.slip_image_url, 300);
+        $("slipImg").src = data?.signedUrl || "";
+      }
+      openModal("slipModal");
+    }
+    $("slipApprove").onclick = () => verifySlip(true);
+    $("slipReject").onclick = () => verifySlip(false);
+    async function verifySlip(approve) {
+      closeModal("slipModal");
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/verify-slip`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: currentSlipBooking.id, adminUserId: app.userId, approve }),
+        });
+        if (!res.ok) throw new Error();
+        toast(approve ? "อนุมัติแล้ว ส่งใบเสร็จให้ลูกค้า" : "ปฏิเสธสลิปแล้ว");
+        loadBookings();
+      } catch (e) { toast("ทำรายการไม่สำเร็จ"); }
+    }
+
+    // ---------- Dispatch ----------
+    let currentDispatchBooking = null;
+    function openDispatch(b) {
+      currentDispatchBooking = b;
+      const avail = app.drivers.filter((d) => d.status === "available");
+      if (!avail.length) { toast("ไม่มีคนขับว่างขณะนี้"); return; }
+      $("driverSelect").innerHTML = avail.map((d) => `<option value="${d.id}">${d.name} · ${d.vehicle_plate || "-"} (${d.vehicle_type || "ปกติ"})</option>`).join("");
+      openModal("dispatchModal");
+    }
+    $("dispatchConfirm").onclick = async () => {
+      const driverId = $("driverSelect").value;
+      closeModal("dispatchModal");
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/dispatch`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: currentDispatchBooking.id, driverId }),
+        });
+        if (!res.ok) throw new Error();
+        toast("จ่ายงานเรียบร้อย แจ้งลูกค้าแล้ว");
+        loadBookings(); loadDrivers();
+      } catch (e) { toast("จ่ายงานไม่สำเร็จ"); }
+    };
+
+    // ---------- Cancel ----------
+    async function cancelBooking(b) {
+      if (!confirm(`ยกเลิกการจอง #${b.id.slice(0,8)}?`)) return;
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/cancel`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: b.id }),
+        });
+        if (!res.ok) throw new Error();
+        toast("ยกเลิกแล้ว แจ้งลูกค้าแล้ว");
+        loadBookings();
+      } catch (e) { toast("ยกเลิกไม่สำเร็จ"); }
+    }
+
+    // ---------- Drivers ----------
+    function renderDrivers() {
+      if (!app.drivers.length) { $("driverList").innerHTML = `<div class="empty">ยังไม่มีคนขับ</div>`; return; }
+      const TH = { available: "ว่าง", on_trip: "มีงาน", offline: "ออฟไลน์" };
+      $("driverList").innerHTML = app.drivers.map((d) => `
+        <div class="driver-row">
+          <div class="ava">🧑‍✈️</div>
+          <div class="info"><b>${d.name}</b><small>${d.vehicle_plate || "-"} · ${d.vehicle_type || "ปกติ"} · ${d.phone || ""}</small></div>
+          <span class="dstatus d-${d.status}">${TH[d.status] || d.status}</span>
+        </div>`).join("");
+    }
+
+    // ---------- Map ----------
+    function renderMapMarkers() {
+      if (!app.map || !window.google) return;
+      app.drivers.forEach((d) => {
+        if (d.current_lat == null) return;
+        const pos = { lat: d.current_lat, lng: d.current_lng };
+        const color = d.status === "on_trip" ? "#E08A1E" : "#1F9E7A";
+        if (app.driverMarkers[d.id]) app.driverMarkers[d.id].setPosition(pos);
+        else app.driverMarkers[d.id] = new google.maps.Marker({
+          position: pos, map: app.map, title: d.name,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 11, fillColor: color, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 },
+        });
+      });
+    }
+    window.initAdminMap = function () {
+      app.map = new google.maps.Map($("adminMap"), { center: { lat: 13.7563, lng: 100.5018 }, zoom: 11, disableDefaultUI: true, zoomControl: true });
+      renderMapMarkers();
+    };
+
+    // ---------- Realtime ----------
+    function subscribeRealtime() {
+      sb.channel("admin-bookings")
+        .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `tenant_id=eq.${app.tenantId}` }, () => loadBookings())
+        .subscribe();
+      sb.channel("admin-drivers")
+        .on("postgres_changes", { event: "*", schema: "public", table: "drivers", filter: `tenant_id=eq.${app.tenantId}` }, () => loadDrivers())
+        .subscribe();
+    }
+
+    // ---------- Tabs + modal ----------
+    document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
+    function switchView(v) {
+      document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x.dataset.view === v));
+      document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
+      $(`view-${v}`).classList.add("active");
+      if (v === "map" && app.map) google.maps.event.trigger(app.map, "resize");
+    }
+    function openModal(id) { $(id).classList.add("show"); }
+    window.closeModal = (id) => $(id).classList.remove("show");
+    document.querySelectorAll(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) m.classList.remove("show"); }));
+
+    // ---------- boot ----------
+    sb.auth.getSession().then(({ data: { session } }) => { if (session) boot(); });
+    (function loadMaps() {
+      const s = document.createElement("script");
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_KEY}&callback=initAdminMap&language=th&region=TH`;
+      s.async = true; document.head.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

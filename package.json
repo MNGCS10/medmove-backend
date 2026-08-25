@@ -1,0 +1,15 @@
+{
+  "name": "medmove-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run server.ts",
+    "dev": "bun --watch server.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "promptpay-qr": "^0.5.0",
+    "qrcode": "^1.5.4"
+  }
+}

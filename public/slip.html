@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>แนบสลิปโอนเงิน — MedMove</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --teal: #0E5A54; --teal-dark: #0A4641; --ok: #1F9E7A; --dest: #D64545;
+      --surface: #F2F5F4; --card: #fff; --ink: #16302E; --muted: #5E7370; --line: #DCE5E2;
+      --shadow: 0 2px 12px rgba(14,90,84,.08); --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { font-family: "IBM Plex Sans Thai", system-ui, sans-serif; background: var(--surface); color: var(--ink); font-size: 16px; line-height: 1.5; }
+    body { min-height: 100vh; padding-bottom: 96px; }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    header { background: var(--teal); color: #fff; padding: 16px 18px; display: flex; align-items: center; gap: 10px; }
+    header .logo { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.16); display: grid; place-items: center; font-size: 19px; }
+    header h1 { font-size: 17px; font-weight: 600; }
+    .wrap { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+    .amount-card { text-align: center; }
+    .amount-card .k { font-size: 13px; color: var(--muted); }
+    .amount-card .v { font-size: 34px; font-weight: 600; color: var(--teal); margin: 4px 0; }
+    .amount-card .note { font-size: 12.5px; color: var(--muted); }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+    .drop {
+      border: 2px dashed var(--line); border-radius: var(--radius); padding: 30px 16px;
+      text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .drop:active { border-color: var(--teal); background: #F7FAF9; }
+    .drop .ic { font-size: 38px; }
+    .drop b { display: block; color: var(--ink); margin-top: 8px; font-weight: 600; }
+    .drop small { font-size: 12.5px; }
+    #fileInput { display: none; }
+    .preview { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
+    .preview img { width: 100%; display: block; }
+    .preview .change { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 9px; padding: 8px 12px; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+    .submit-bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+    .btn-primary { width: 100%; background: var(--teal); color: #fff; border: none; border-radius: 13px; padding: 16px; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .btn-primary:disabled { opacity: .45; }
+    .btn-primary:active:not(:disabled) { background: var(--teal-dark); }
+
+    .overlay { position: fixed; inset: 0; z-index: 100; background: var(--surface); display: flex; flex-direction: column; }
+    .overlay.hidden { display: none; }
+    .center-msg { flex: 1; display: grid; place-items: center; text-align: center; padding: 30px; }
+    .spinner { width: 42px; height: 42px; border: 4px solid var(--line); border-top-color: var(--teal); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .center-msg .big { font-size: 46px; margin-bottom: 8px; }
+    .center-msg h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .center-msg p { color: var(--muted); font-size: 15px; }
+    .toast { position: fixed; left: 16px; right: 16px; bottom: 90px; z-index: 200; background: var(--ink); color: #fff; padding: 13px 16px; border-radius: 12px; font-size: 14px; text-align: center; opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <header><div class="logo">🧾</div><h1>แนบสลิปโอนเงิน</h1></header>
+
+  <div class="wrap">
+    <div class="card amount-card">
+      <div class="k">ยอดที่ต้องชำระ</div>
+      <div class="v mono" id="amount">—</div>
+      <div class="note">โอนผ่าน PromptPay ตาม QR ในแชท แล้วแนบสลิปที่นี่</div>
+    </div>
+
+    <div class="card">
+      <div class="eyebrow">รูปสลิป</div>
+      <div class="drop" id="dropZone">
+        <div class="ic">📸</div>
+        <b>แตะเพื่อถ่ายรูป หรือเลือกจากคลัง</b>
+        <small>รองรับ JPG / PNG</small>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" />
+    </div>
+  </div>
+
+  <div class="submit-bar"><button class="btn-primary" id="submitBtn" disabled>ส่งสลิป</button></div>
+  <div class="toast" id="toast"></div>
+
+  <div class="overlay hidden" id="loadingOverlay"><div class="center-msg"><div><div class="spinner"></div><p>กำลังส่งสลิป…</p></div></div></div>
+  <div class="overlay hidden" id="resultOverlay"><div class="center-msg" id="resultBody"></div></div>
+
+  <script>
+    // ▼▼▼ กรอกตอน deploy ▼▼▼
+    const CONFIG = { LIFF_ID: "0000000000-xxxxxxxx", BACKEND_URL: "https://your-backend.example" };
+    // ▲▲▲
+
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const bookingId = params.get("bookingId") || "";
+    const amount = params.get("amount");
+    let imageBase64 = null;
+
+    $("amount").textContent = amount ? Number(amount).toLocaleString("th-TH") + " ฿" : "ตามยอดในแชท";
+
+    function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+
+    $("dropZone").addEventListener("click", () => $("fileInput").click());
+    $("fileInput").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        imageBase64 = reader.result;
+        $("dropZone").outerHTML =
+          `<div class="preview"><img src="${imageBase64}" alt="สลิป" />` +
+          `<button class="change" onclick="document.getElementById('fileInput').click()">เปลี่ยนรูป</button></div>`;
+        $("submitBtn").disabled = false;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    async function submitSlip() {
+      if (!imageBase64) return toast("กรุณาแนบรูปสลิปก่อน");
+      if (!bookingId) return toast("ไม่พบรหัสการจอง");
+      $("loadingOverlay").classList.remove("hidden");
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/upload-slip`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId, imageBase64 }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "ส่งสลิปไม่สำเร็จ");
+        const data = await res.json();
+        const verified = data.status === "verified" || data.status === "manual_verified";
+        showResult({
+          icon: verified ? "✅" : "🕐",
+          title: verified ? "ชำระเงินสำเร็จ" : "ได้รับสลิปแล้ว",
+          msg: verified ? "ดูใบเสร็จได้ในข้อความ LINE" : "กำลังตรวจสอบ ทีมงานจะยืนยันให้เร็วที่สุด",
+        });
+      } catch (err) {
+        $("loadingOverlay").classList.add("hidden");
+        toast(err.message);
+      }
+    }
+    $("submitBtn").addEventListener("click", submitSlip);
+
+    function showResult({ icon, title, msg }) {
+      $("loadingOverlay").classList.add("hidden");
+      $("resultBody").innerHTML = `<div><div class="big">${icon}</div><h2>${title}</h2><p>${msg}</p>` +
+        `<button class="btn-primary" style="margin-top:22px;max-width:240px" onclick="closeApp()">ปิดหน้าต่าง</button></div>`;
+      $("resultOverlay").classList.remove("hidden");
+    }
+    window.closeApp = () => { try { liff.closeWindow(); } catch (e) { location.reload(); } };
+
+    (async () => {
+      try { await liff.init({ liffId: CONFIG.LIFF_ID }); if (!liff.isLoggedIn()) liff.login(); }
+      catch (e) { console.warn("LIFF dev mode", e); }
+    })();
+  </script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</body>
+</html>
