@@ -32,12 +32,15 @@ export function staticRouteMapUrl(
   key: string,
 ): string {
   const base = "https://maps.googleapis.com/maps/api/staticmap";
-  const size = "600x360";
   const o = `${originLat},${originLng}`;
   const d = `${destLat},${destLng}`;
-  const markers = `markers=color:green|label:A|${o}&markers=color:red|label:B|${d}`;
-  const path = `path=color:0xC62828ff|weight:4|${o}|${d}`;
-  return `${base}?size=${size}&${markers}&${path}&key=${key}`;
+  const params = new URLSearchParams();
+  params.set("size", "600x360");
+  params.append("markers", `color:green|label:A|${o}`);
+  params.append("markers", `color:red|label:B|${d}`);
+  params.append("path", `color:0xC62828ff|weight:4|${o}|${d}`);
+  params.set("key", key);
+  return `${base}?${params.toString()}`;
 }
 
 // -------------------------------------------------------------
