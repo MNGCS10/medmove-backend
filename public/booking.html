@@ -205,7 +205,7 @@
   </style>
 </head>
 <body>
-
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <!-- ========== PDPA GATE ========== -->
   <div class="overlay" id="pdpaGate">
     <div class="pdpa-body">
@@ -340,7 +340,7 @@
   <script>
     // ▼▼▼ กรอกค่าจริงตอน deploy ▼▼▼
     const CONFIG = {
-      LIFF_ID: "2011257803-4H3sBtlr",
+      LIFF_ID: "2011257803-4H3sBtIr",
       GOOGLE_MAPS_KEY: "AIzaSyBRBsxRXOWz3uNa-gwv1zjkP6d8dzafm4g",
       BACKEND_URL: "https://medmove-backend.onrender.com",
       TENANT_ID: "8da0536e-3928-4baf-9948-903e42406ed7",
@@ -408,6 +408,7 @@
         state.profile = { userId: p.userId, displayName: p.displayName, pictureUrl: p.pictureUrl };
       } catch (err) {
         console.warn("LIFF init failed (dev mode?)", err);
+        alert("LIFF ERR: " + (err?.message || err) + " | isLoggedIn=" + (typeof liff !== "undefined" && liff.isLoggedIn ? liff.isLoggedIn() : "n/a"));
         state.profile = { userId: "DEV_USER", displayName: "ทดสอบ", pictureUrl: "" };
       }
     }
@@ -598,7 +599,7 @@
   </script>
 
   <!-- LIFF SDK -->
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  
   <!-- Google Maps (callback initMap) -->
   <script>
     (function () {
