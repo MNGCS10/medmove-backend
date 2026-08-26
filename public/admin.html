@@ -182,7 +182,10 @@
       <div class="view" id="view-map"><div id="adminMap"></div></div>
 
       <!-- Drivers -->
-      <div class="view" id="view-drivers"><div id="driverList"><div class="empty">กำลังโหลด…</div></div></div>
+      <div class="view" id="view-drivers">
+        <button class="btn btn-primary" id="addDriverBtn" style="width:100%;margin-bottom:14px">+ เพิ่มคนขับ</button>
+        <div id="driverList"><div class="empty">กำลังโหลด…</div></div>
+      </div>
 
       <!-- Settings -->
       <div class="view" id="view-settings">
@@ -284,6 +287,57 @@
     </div>
   </div>
 
+  <!-- Add driver modal -->
+  <div class="modal" id="addDriverModal">
+    <div class="panel">
+      <h3>เพิ่มคนขับใหม่</h3>
+      <div class="field">
+        <label>ชื่อคนขับ</label>
+        <input type="text" id="drvName" placeholder="เช่น สมชาย ใจดี" />
+      </div>
+      <div class="field">
+        <label>เบอร์โทร</label>
+        <input type="text" id="drvPhone" placeholder="เช่น 0812345678" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>ทะเบียนรถ</label>
+          <input type="text" id="drvPlate" placeholder="เช่น กข-1234" />
+        </div>
+        <div class="field">
+          <label>ประเภทรถ</label>
+          <select id="drvType" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:14.5px">
+            <option value="ปกติ">ปกติ</option>
+            <option value="มีออกซิเจน">มีออกซิเจน</option>
+            <option value="ICU">ICU</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost" onclick="closeModal('addDriverModal')">ยกเลิก</button>
+        <button class="btn btn-primary" id="addDriverConfirm">เพิ่มคนขับ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Driver link modal -->
+  <div class="modal" id="driverLinkModal">
+    <div class="panel">
+      <h3 id="driverLinkName">ลิงก์ประจำตัวคนขับ</h3>
+      <div style="text-align:center;margin-bottom:14px">
+        <img id="driverLinkQr" src="" alt="QR" style="width:180px;height:180px;border:1px solid var(--line);border-radius:12px" />
+      </div>
+      <div class="field">
+        <label>ลิงก์ (ส่งให้คนขับทาง LINE)</label>
+        <input type="text" id="driverLinkUrl" readonly style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-family:monospace;font-size:12.5px" />
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost" onclick="closeModal('driverLinkModal')">ปิด</button>
+        <button class="btn btn-primary" id="copyDriverLink">📋 คัดลอกลิงก์</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -294,6 +348,7 @@
       SUPABASE_ANON_KEY: "YOUR_ANON_KEY",
       BACKEND_URL: "https://your-backend.example",
       GOOGLE_MAPS_KEY: "YOUR_GOOGLE_MAPS_BROWSER_KEY",
+      DRIVER_LIFF_ID: "2011257803-HwATAEsy",
     };
     // ▲▲▲
 
@@ -510,8 +565,59 @@
           <div class="ava">🧑‍✈️</div>
           <div class="info"><b>${d.name}</b><small>${d.vehicle_plate || "-"} · ${d.vehicle_type || "ปกติ"} · ${d.phone || ""}</small></div>
           <span class="dstatus d-${d.status}">${TH[d.status] || d.status}</span>
+          <button class="btn btn-ghost" style="margin-left:8px;padding:7px 10px;font-size:12.5px" onclick="showDriverLink('${d.id}','${(d.name || "").replace(/'/g, "\\'")}')">🔗 ลิงก์</button>
         </div>`).join("");
     }
+
+    // ---------- Add driver + personal link ----------
+    $("addDriverBtn").addEventListener("click", () => openModal("addDriverModal"));
+
+    $("addDriverConfirm").addEventListener("click", async () => {
+      const name = $("drvName").value.trim();
+      if (!name) { toast("กรอกชื่อคนขับก่อน"); return; }
+      const payload = {
+        tenant_id: app.tenantId,
+        name,
+        phone: $("drvPhone").value.trim() || null,
+        vehicle_plate: $("drvPlate").value.trim() || null,
+        vehicle_type: $("drvType").value,
+        status: "offline",
+      };
+      $("addDriverConfirm").disabled = true;
+      try {
+        const { data, error } = await sb.from("drivers").insert(payload).select().single();
+        if (error) throw error;
+        $("drvName").value = ""; $("drvPhone").value = ""; $("drvPlate").value = "";
+        closeModal("addDriverModal");
+        await loadDrivers();
+        toast("เพิ่มคนขับแล้ว ✅");
+        showDriverLink(data.id, data.name);
+      } catch (err) {
+        toast("เพิ่มคนขับไม่สำเร็จ: " + (err.message || err));
+      } finally {
+        $("addDriverConfirm").disabled = false;
+      }
+    });
+
+    window.showDriverLink = (driverId, name) => {
+      const url = `https://liff.line.me/${CONFIG.DRIVER_LIFF_ID}?driverId=${driverId}`;
+      $("driverLinkName").textContent = `ลิงก์ประจำตัว — ${name}`;
+      $("driverLinkUrl").value = url;
+      $("driverLinkQr").src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+      openModal("driverLinkModal");
+    };
+
+    $("copyDriverLink").addEventListener("click", async () => {
+      const url = $("driverLinkUrl").value;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast("คัดลอกลิงก์แล้ว");
+      } catch (e) {
+        $("driverLinkUrl").select();
+        document.execCommand("copy");
+        toast("คัดลอกลิงก์แล้ว");
+      }
+    });
 
     // ---------- Map ----------
     function renderMapMarkers() {
