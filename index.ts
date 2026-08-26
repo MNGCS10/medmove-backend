@@ -48,11 +48,15 @@ function verifyLineSignature(body: string, signature: string | undefined): boole
   catch { return false; }
 }
 async function linePush(to: string, messages: any[]) {
-  await fetch("https://api.line.me/v2/bot/message/push", {
+  const res = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}` },
     body: JSON.stringify({ to, messages }),
   });
+  if (!res.ok) {
+    const errBody = await res.text();
+    console.error("LINE PUSH FAILED", res.status, errBody);
+  }
 }
 async function lineReply(replyToken: string, messages: any[]) {
   await fetch("https://api.line.me/v2/bot/message/reply", {
