@@ -72,10 +72,12 @@
 
     <div class="card">
       <div class="eyebrow">รูปสลิป</div>
-      <div class="drop" id="dropZone">
-        <div class="ic">📸</div>
-        <b>แตะเพื่อถ่ายรูป หรือเลือกจากคลัง</b>
-        <small>รองรับ JPG / PNG</small>
+      <div class="drop-wrap" id="dropWrap">
+        <div class="drop" id="dropZone">
+          <div class="ic">📸</div>
+          <b>แตะเพื่อถ่ายรูป หรือเลือกจากคลัง</b>
+          <small>รองรับ JPG / PNG</small>
+        </div>
       </div>
       <input type="file" id="fileInput" accept="image/*" />
     </div>
@@ -109,7 +111,7 @@
       const reader = new FileReader();
       reader.onload = () => {
         imageBase64 = reader.result;
-        $("dropZone").outerHTML =
+        $("dropWrap").innerHTML =
           `<div class="preview"><img src="${imageBase64}" alt="สลิป" />` +
           `<button class="change" onclick="document.getElementById('fileInput').click()">เปลี่ยนรูป</button></div>`;
         $("submitBtn").disabled = false;
