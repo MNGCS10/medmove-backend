@@ -31,15 +31,19 @@
     .drop {
       border: 2px dashed var(--line); border-radius: var(--radius); padding: 30px 16px;
       text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+      width: 100%; background: none; font-family: inherit; display: block;
     }
     .drop:active { border-color: var(--teal); background: #F7FAF9; }
     .drop .ic { font-size: 38px; }
     .drop b { display: block; color: var(--ink); margin-top: 8px; font-weight: 600; }
     .drop small { font-size: 12.5px; }
-    #fileInput { display: none; }
     .preview { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
     .preview img { width: 100%; display: block; }
-    .preview .change { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 9px; padding: 8px 12px; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .preview .change-row { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
+    .preview .change-row button {
+      background: rgba(0,0,0,.65); color: #fff; border: none; border-radius: 9px; padding: 8px 12px;
+      font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer;
+    }
 
     .submit-bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
     .btn-primary { width: 100%; background: var(--teal); color: #fff; border: none; border-radius: 13px; padding: 16px; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
@@ -73,13 +77,12 @@
     <div class="card">
       <div class="eyebrow">รูปสลิป</div>
       <div class="drop-wrap" id="dropWrap">
-        <div class="drop" id="dropZone">
-          <div class="ic">📸</div>
-          <b>แตะเพื่อถ่ายรูป หรือเลือกจากคลัง</b>
+        <button type="button" class="drop" id="btnGallery">
+          <div class="ic">🖼️</div>
+          <b>แตะเพื่อเลือกรูปสลิปจากคลังภาพ</b>
           <small>รองรับ JPG / PNG</small>
-        </div>
+        </button>
       </div>
-      <input type="file" id="fileInput" accept="image/*" />
     </div>
   </div>
 
@@ -104,20 +107,40 @@
 
     function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
 
-    $("dropZone").addEventListener("click", () => $("fileInput").click());
-    $("fileInput").addEventListener("change", (e) => {
+    // สร้าง <input type=file> ใหม่ทุกครั้งที่จะเลือกรูป (แทนใช้ตัวเดิมซ้ำ)
+    // เพราะ Android WebView/LIFF บางรุ่นไม่ยิง "change" event ซ้ำเสถียรกับ
+    // Photo Picker ตัวใหม่ของระบบเมื่อ reuse input ตัวเดิมหลายรอบ
+    function makeFileInput() {
+      const el = document.createElement("input");
+      el.type = "file";
+      el.accept = "image/*";
+      el.style.display = "none";
+      el.addEventListener("change", onFileChosen);
+      document.body.appendChild(el);
+      return el;
+    }
+
+    function onFileChosen(e) {
       const file = e.target.files[0];
-      if (!file) return;
+      const inputEl = e.target;
+      if (!file) { inputEl.remove(); return; }
       const reader = new FileReader();
       reader.onload = () => {
         imageBase64 = reader.result;
         $("dropWrap").innerHTML =
           `<div class="preview"><img src="${imageBase64}" alt="สลิป" />` +
-          `<button class="change" onclick="document.getElementById('fileInput').click()">เปลี่ยนรูป</button></div>`;
+          `<div class="change-row">` +
+          `<button type="button" onclick="openGallery()">🔄 เปลี่ยนรูป</button>` +
+          `</div></div>`;
         $("submitBtn").disabled = false;
       };
       reader.readAsDataURL(file);
-    });
+      inputEl.remove(); // เคลียร์ input เก่าทิ้งเสมอ กันสถานะค้าง
+    }
+
+    window.openGallery = () => makeFileInput().click();
+
+    $("btnGallery").addEventListener("click", () => openGallery());
 
     async function submitSlip() {
       if (!imageBase64) return toast("กรุณาแนบรูปสลิปก่อน");
