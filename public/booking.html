@@ -408,7 +408,6 @@
         state.profile = { userId: p.userId, displayName: p.displayName, pictureUrl: p.pictureUrl };
       } catch (err) {
         console.warn("LIFF init failed (dev mode?)", err);
-        alert("LIFF ERR: " + (err?.message || err) + " | isLoggedIn=" + (typeof liff !== "undefined" && liff.isLoggedIn ? liff.isLoggedIn() : "n/a"));
         state.profile = { userId: "DEV_USER", displayName: "ทดสอบ", pictureUrl: "" };
       }
     }

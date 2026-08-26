@@ -9,10 +9,10 @@ import { cors } from "hono/cors";
 import { createClient } from "@supabase/supabase-js";
 import { createHmac, timingSafeEqual, createHash } from "node:crypto";
 import {
-  flexConfirmBooking, flexPaymentRequest, flexReceipt, flexTracking,
+  flexConfirmBooking, flexPaymentRequest, flexPaymentRequestManual, flexReceipt, flexTracking,
   staticRouteMapUrl,
 } from "./flex-messages";
-import { buildPromptPayQrUrl, getPromptPayId } from "./promptpay-qr";
+import { buildPromptPayQrUrl, getPromptPayId, isPromptPayEnabled } from "./promptpay-qr";
 
 // ---------- env ----------
 const {
@@ -198,15 +198,25 @@ async function handlePostback(ev: any) {
 
   if (action === "confirm") {
     await sb.from("bookings").update({ status: "awaiting_payment" }).eq("id", bookingId);
-    const promptpayId = await getPromptPayId(booking.tenant_id);
-    const qrImageUrl = await buildPromptPayQrUrl(
-      { tenantId: booking.tenant_id, promptpayId }, booking.price_calculated, bookingId,
-    );
-    await linePush(ev.source.userId, [flex("ชำระเงิน", flexPaymentRequest({
-      bookingId, qrImageUrl, amount: booking.price_calculated,
-      accountName: "MedMove", accountNo: promptpayId, bankName: "PromptPay",
-      liffUploadUrl: LIFF_UPLOAD_URL,
-    }))]);
+
+    // เช็คว่า tenant เปิด PromptPay ไว้ไหม (ตั้งผ่าน admin.html → ตั้งค่า)
+    // ปิดไว้ -> ข้าม QR ไปเลย ให้ลูกค้าแนบสลิปตรง แอดมิน verify มือ (ไม่บล็อกการจอง)
+    const ppEnabled = await isPromptPayEnabled(booking.tenant_id);
+    if (ppEnabled) {
+      const promptpayId = await getPromptPayId(booking.tenant_id);
+      const qrImageUrl = await buildPromptPayQrUrl(
+        { tenantId: booking.tenant_id, promptpayId }, booking.price_calculated, bookingId,
+      );
+      await linePush(ev.source.userId, [flex("ชำระเงิน", flexPaymentRequest({
+        bookingId, qrImageUrl, amount: booking.price_calculated,
+        accountName: "MedMove", accountNo: promptpayId, bankName: "PromptPay",
+        liffUploadUrl: LIFF_UPLOAD_URL,
+      }))]);
+    } else {
+      await linePush(ev.source.userId, [flex("ชำระเงิน", flexPaymentRequestManual({
+        bookingId, amount: booking.price_calculated, liffUploadUrl: LIFF_UPLOAD_URL,
+      }))]);
+    }
     await linePush(ADMIN_LINE_TARGET, [{ type: "text", text: `✅ ลูกค้ายืนยันจอง #${bookingId.slice(0, 8)} รอชำระเงิน` }]);
   }
 

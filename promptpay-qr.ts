@@ -59,8 +59,23 @@ export async function buildPromptPayQrUrl(
   return sb.storage.from(QR_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-// helper: ดึง promptpay id ของ tenant (เก็บใน tenants หรือ config table)
+// helper: เช็คว่า tenant เปิดใช้ PromptPay ไว้ไหม (ตั้งผ่าน admin.html → ตั้งค่า)
+export async function isPromptPayEnabled(tenantId: string): Promise<boolean> {
+  const { data } = await sb
+    .from("tenant_settings")
+    .select("promptpay_enabled, promptpay_id")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  return Boolean(data?.promptpay_enabled && data?.promptpay_id);
+}
+
+// helper: ดึง promptpay id ของ tenant จาก tenant_settings (แก้ผ่านหน้า admin ได้ ไม่ต้อง redeploy)
 export async function getPromptPayId(tenantId: string): Promise<string> {
-  // TODO: อ่านจาก tenants.promptpay_id หรือ pricing_configs — ที่นี่ fallback env
-  return process.env.PROMPTPAY_ID ?? "0000000000";
+  const { data } = await sb
+    .from("tenant_settings")
+    .select("promptpay_id")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  // fallback env ไว้เผื่อยังไม่ได้ตั้งผ่านหน้า admin (dev/migration ช่วงแรก)
+  return data?.promptpay_id ?? process.env.PROMPTPAY_ID ?? "0000000000";
 }

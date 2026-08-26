@@ -188,6 +188,56 @@ export function flexPaymentRequest(p: {
 }
 
 // -------------------------------------------------------------
+// ขั้น 2b: ขอชำระเงินแบบไม่มี QR (กรณีปิด PromptPay ไว้ในหน้าตั้งค่า)
+// -------------------------------------------------------------
+export function flexPaymentRequestManual(p: {
+  bookingId: string;
+  amount: number;
+  liffUploadUrl: string;
+  note?: string; // ข้อความแจ้งช่องทางโอน ถ้าไม่ใส่จะบอกให้ติดต่อแอดมิน
+}): FlexBubble {
+  return {
+    type: "bubble",
+    body: {
+      type: "box",
+      layout: "vertical",
+      spacing: "md",
+      contents: [
+        { type: "text", text: "ชำระค่าบริการ", weight: "bold", size: "lg", color: BRAND },
+        {
+          type: "text",
+          text: `${baht(p.amount)} บาท`,
+          weight: "bold", size: "3xl", align: "center", color: BRAND,
+        },
+        { type: "separator" },
+        {
+          type: "text",
+          text: p.note || "กรุณาติดต่อแอดมินเพื่อขอช่องทางการโอนเงิน",
+          size: "sm", color: MUTED, wrap: true,
+        },
+      ],
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      contents: [
+        {
+          type: "button",
+          style: "primary",
+          color: BRAND,
+          action: {
+            type: "uri",
+            label: "📎 แนบสลิปโอนเงิน",
+            uri: `${p.liffUploadUrl}?bookingId=${p.bookingId}`,
+          },
+        },
+        { type: "text", text: "หรือส่งรูปสลิปเข้าแชทนี้ได้เลย", size: "xs", color: MUTED, align: "center", margin: "sm" },
+      ],
+    },
+  };
+}
+
+// -------------------------------------------------------------
 // ขั้น 3: ใบเสร็จ / Invoice (หลังสลิปผ่าน)
 // -------------------------------------------------------------
 export function flexReceipt(p: {

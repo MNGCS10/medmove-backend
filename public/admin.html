@@ -106,6 +106,28 @@
     .modal .row { display: flex; gap: 10px; }
     .modal .row .btn { flex: 1; text-align: center; }
 
+    /* ---------- Settings ---------- */
+    .settings-card { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 14px; }
+    .settings-card h3 { font-size: 15px; margin-bottom: 4px; }
+    .settings-card .desc { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+    .field .hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+    .field input[type="text"], .field input[type="number"] {
+      width: 100%; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px;
+      font-family: inherit; font-size: 14.5px; outline: none;
+    }
+    .field input:focus { border-color: var(--teal); }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 14px; }
+    .switch-row .lbl { font-size: 13.5px; font-weight: 600; }
+    .switch { position: relative; width: 44px; height: 26px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider { position: absolute; inset: 0; background: #D8E0DE; border-radius: 20px; cursor: pointer; transition: .2s; }
+    .switch .slider::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+    .switch input:checked + .slider { background: var(--ok); }
+    .switch input:checked + .slider::before { transform: translateX(18px); }
+
     .toast { position: fixed; left: 50%; transform: translateX(-50%) translateY(10px); bottom: 24px; z-index: 100; background: var(--ink); color: #fff; padding: 13px 20px; border-radius: 12px; font-size: 14px; opacity: 0; transition: .2s; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -141,6 +163,7 @@
         <button class="active" data-view="bookings">📋 รายการจอง</button>
         <button data-view="map">🗺️ แผนที่รวม</button>
         <button data-view="drivers">🧑‍✈️ คนขับ</button>
+        <button data-view="settings">⚙️ ตั้งค่า</button>
       </div>
 
       <!-- Bookings -->
@@ -160,6 +183,79 @@
 
       <!-- Drivers -->
       <div class="view" id="view-drivers"><div id="driverList"><div class="empty">กำลังโหลด…</div></div></div>
+
+      <!-- Settings -->
+      <div class="view" id="view-settings">
+        <div class="settings-card">
+          <h3>💰 พร้อมเพย์ (PromptPay)</h3>
+          <div class="desc">เปิดไว้ระบบจะสร้าง QR ผูกยอดให้ลูกค้าสแกนอัตโนมัติ ปิดไว้ลูกค้าจะเห็นแค่ยอดเงินและปุ่มแนบสลิป (ให้แจ้งช่องทางโอนเอง)</div>
+          <div class="switch-row">
+            <div class="lbl">เปิดใช้ PromptPay QR</div>
+            <label class="switch">
+              <input type="checkbox" id="ppEnabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="field">
+            <label>เลขพร้อมเพย์ (เบอร์มือถือ / เลขบัตร ปชช. / เลขนิติบุคคล)</label>
+            <input type="text" id="ppId" placeholder="เช่น 0812345678" />
+            <div class="hint">ใช้สร้าง QR ผูกยอดเงินอัตโนมัติ — ต้องกรอกก่อนเปิดใช้งาน</div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>📐 สูตรคำนวณราคา</h3>
+          <div class="desc">ราคา = ค่าเรียกรถเริ่มต้น + (ระยะทาง × (ราคาน้ำมัน/กม. + มาร์จิ้น/กม.)) แล้วบวกเพิ่มถ้าเป็นช่วงกลางคืน</div>
+          <div class="field-row">
+            <div class="field">
+              <label>ราคาน้ำมัน (บาท/ลิตร)</label>
+              <input type="number" step="0.01" id="cfgFuelPrice" />
+            </div>
+            <div class="field">
+              <label>อัตราสิ้นเปลือง (กม./ลิตร)</label>
+              <input type="number" step="0.1" id="cfgFuelKmPerL" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>มาร์จิ้น/กำไร (บาท/กม.)</label>
+              <input type="number" step="0.5" id="cfgMarginPerKm" />
+              <div class="hint">ยิ่งสูงยิ่งกำไรเยอะขึ้นต่อกิโล ปรับตรงนี้ได้ทันทีไม่ต้องแก้โค้ด</div>
+            </div>
+            <div class="field">
+              <label>ค่าเรียกรถเริ่มต้น (บาท)</label>
+              <input type="number" step="1" id="cfgBaseFee" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>ระยะทางขั้นต่ำที่คิดเงิน (กม.)</label>
+              <input type="number" step="0.5" id="cfgMinKm" />
+            </div>
+            <div class="field">
+              <label>ค่ารอ (บาท/ชม.)</label>
+              <input type="number" step="1" id="cfgWaitFee" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>ค่าธรรมเนียมกลางคืน (%)</label>
+              <input type="number" step="1" id="cfgNightPct" />
+            </div>
+            <div class="field">
+              <label>ช่วงเวลากลางคืน (ชม.)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="number" min="0" max="23" id="cfgNightStart" style="width:70px" />
+                <span style="color:var(--muted);font-size:13px">ถึง</span>
+                <input type="number" min="0" max="23" id="cfgNightEnd" style="width:70px" />
+                <span style="color:var(--muted);font-size:13px">น.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="settingsSave" style="width:100%;padding:14px">💾 บันทึกการตั้งค่า</button>
+      </div>
     </div>
   </div>
 
@@ -446,6 +542,77 @@
         .subscribe();
     }
 
+    // ---------- Settings (PromptPay + pricing) ----------
+    app.settingsLoaded = false;
+    async function loadSettings() {
+      const [{ data: ts }, { data: pc }] = await Promise.all([
+        sb.from("tenant_settings").select("*").eq("tenant_id", app.tenantId).maybeSingle(),
+        sb.from("pricing_configs").select("*").eq("tenant_id", app.tenantId)
+          .order("effective_date", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      app.settingsRow = pc || null; // เก็บไว้เช็คว่ามี row วันนี้แล้วหรือยังตอน save
+
+      $("ppEnabled").checked = Boolean(ts?.promptpay_enabled);
+      $("ppId").value = ts?.promptpay_id || "";
+
+      $("cfgFuelPrice").value = pc?.fuel_price_per_liter ?? 32.5;
+      $("cfgFuelKmPerL").value = pc?.fuel_consumption_km_per_l ?? 10;
+      $("cfgMarginPerKm").value = pc?.margin_per_km ?? 15;
+      $("cfgBaseFee").value = pc?.base_fee ?? 100;
+      $("cfgMinKm").value = pc?.min_distance_charge_km ?? 5;
+      $("cfgWaitFee").value = pc?.waiting_fee_per_hour ?? 100;
+      $("cfgNightPct").value = pc?.night_surcharge_percent ?? 20;
+      $("cfgNightStart").value = pc?.night_start_hour ?? 22;
+      $("cfgNightEnd").value = pc?.night_end_hour ?? 5;
+
+      app.settingsLoaded = true;
+    }
+
+    $("settingsSave").addEventListener("click", async () => {
+      const ppEnabled = $("ppEnabled").checked;
+      const ppId = $("ppId").value.trim();
+      if (ppEnabled && !ppId) { toast("กรอกเลขพร้อมเพย์ก่อนเปิดใช้งาน"); return; }
+
+      $("settingsSave").disabled = true; $("settingsSave").textContent = "กำลังบันทึก…";
+      try {
+        // 1) PromptPay -> upsert tenant_settings (1 แถวต่อ tenant)
+        const { error: e1 } = await sb.from("tenant_settings").upsert({
+          tenant_id: app.tenantId, promptpay_id: ppId || null, promptpay_enabled: ppEnabled,
+        }, { onConflict: "tenant_id" });
+        if (e1) throw e1;
+
+        // 2) Pricing -> versioned ด้วย effective_date, ถ้ามี row ของ "วันนี้" แล้วอัปเดตทับ ไม่งั้น insert ใหม่
+        const today = new Date().toISOString().slice(0, 10);
+        const payload = {
+          tenant_id: app.tenantId,
+          fuel_price_per_liter: Number($("cfgFuelPrice").value),
+          fuel_consumption_km_per_l: Number($("cfgFuelKmPerL").value),
+          margin_per_km: Number($("cfgMarginPerKm").value),
+          base_fee: Number($("cfgBaseFee").value),
+          min_distance_charge_km: Number($("cfgMinKm").value),
+          waiting_fee_per_hour: Number($("cfgWaitFee").value),
+          night_surcharge_percent: Number($("cfgNightPct").value),
+          night_start_hour: Number($("cfgNightStart").value),
+          night_end_hour: Number($("cfgNightEnd").value),
+        };
+        let e2;
+        if (app.settingsRow && app.settingsRow.effective_date === today) {
+          ({ error: e2 } = await sb.from("pricing_configs").update(payload).eq("id", app.settingsRow.id));
+        } else {
+          ({ error: e2 } = await sb.from("pricing_configs").insert({ ...payload, effective_date: today }));
+        }
+        if (e2) throw e2;
+
+        toast("บันทึกการตั้งค่าแล้ว ✅");
+        await loadSettings();
+      } catch (err) {
+        console.error(err);
+        toast("บันทึกไม่สำเร็จ: " + (err.message || err));
+      } finally {
+        $("settingsSave").disabled = false; $("settingsSave").textContent = "💾 บันทึกการตั้งค่า";
+      }
+    });
+
     // ---------- Tabs + modal ----------
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
     function switchView(v) {
@@ -453,6 +620,7 @@
       document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
       $(`view-${v}`).classList.add("active");
       if (v === "map" && app.map) google.maps.event.trigger(app.map, "resize");
+      if (v === "settings" && !app.settingsLoaded) loadSettings();
     }
     function openModal(id) { $(id).classList.add("show"); }
     window.closeModal = (id) => $(id).classList.remove("show");
