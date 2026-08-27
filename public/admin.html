@@ -344,9 +344,9 @@
   <script>
     // ▼▼▼ กรอกตอน deploy ▼▼▼
     const CONFIG = {
-      SUPABASE_URL: "https://<PROJECT_REF>.supabase.co",
-      SUPABASE_ANON_KEY: "YOUR_ANON_KEY",
-      BACKEND_URL: "https://your-backend.example",
+      SUPABASE_URL: "https://gflbwbdvooiruuchytlg.supabase.co",
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmbGJ3YmR2b29pcnV1Y2h5dGxnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NDcwNjQsImV4cCI6MjEwMzIyMzA2NH0.EQvN2swBe9y3GZ7c2A4Z4Z4LtYxzD4OXlsjDv09B3xw",
+      BACKEND_URL: "https://medmove-backend.onrender.com",
       GOOGLE_MAPS_KEY: "YOUR_GOOGLE_MAPS_BROWSER_KEY",
       DRIVER_LIFF_ID: "2011257803-HwATAEsy",
     };
@@ -357,6 +357,11 @@
     const app = { tenantId: null, userId: null, filter: "active", bookings: [], drivers: [], map: null, driverMarkers: {} };
 
     function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+    // ใช้แนบ token จริงไปกับทุก call ที่ยิง /api/admin/* (verify-slip, dispatch, cancel)
+    async function authHeaders() {
+      const { data: { session } } = await sb.auth.getSession();
+      return { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token || ""}` };
+    }
     const bkkTime = (d) => d ? new Date(d).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : "—";
     const baht = (n) => Number(n).toLocaleString("th-TH");
 
@@ -510,8 +515,8 @@
       closeModal("slipModal");
       try {
         const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/verify-slip`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bookingId: currentSlipBooking.id, adminUserId: app.userId, approve }),
+          method: "POST", headers: await authHeaders(),
+          body: JSON.stringify({ bookingId: currentSlipBooking.id, approve }),
         });
         if (!res.ok) throw new Error();
         toast(approve ? "อนุมัติแล้ว ส่งใบเสร็จให้ลูกค้า" : "ปฏิเสธสลิปแล้ว");
@@ -533,7 +538,7 @@
       closeModal("dispatchModal");
       try {
         const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/dispatch`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: await authHeaders(),
           body: JSON.stringify({ bookingId: currentDispatchBooking.id, driverId }),
         });
         if (!res.ok) throw new Error();
@@ -547,7 +552,7 @@
       if (!confirm(`ยกเลิกการจอง #${b.id.slice(0,8)}?`)) return;
       try {
         const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/cancel`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: await authHeaders(),
           body: JSON.stringify({ bookingId: b.id }),
         });
         if (!res.ok) throw new Error();
