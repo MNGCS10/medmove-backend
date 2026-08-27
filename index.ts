@@ -32,6 +32,24 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+// ---------- Admin auth guard ----------
+// verify Supabase access token จริงจาก header + resolve tenant ของ admin คนนั้น
+// กันเคส /api/admin/* ถูกยิงตรงโดยไม่ผ่าน login (curl/Postman) และกัน admin ข้าม tenant
+async function requireAdmin(c: any): Promise<{ userId: string; tenantId: string } | null> {
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+
+  const { data: { user }, error } = await sb.auth.getUser(token);
+  if (error || !user) return null;
+
+  const { data: mem } = await sb.from("tenant_members")
+    .select("tenant_id").eq("user_id", user.id).limit(1).maybeSingle();
+  if (!mem) return null;
+
+  return { userId: user.id, tenantId: mem.tenant_id };
+}
+
 const app = new Hono();
 
 app.use("*", cors({
@@ -291,13 +309,17 @@ async function verifySlip(img: Buffer, expectedAmount: number): Promise<{ ok: bo
 
 // admin ตรวจสลิปเอง (POST /api/admin/verify-slip)
 app.post("/api/admin/verify-slip", async (c) => {
-  const { bookingId, adminUserId, approve } = await c.req.json();
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: "unauthorized" }, 401);
+
+  const { bookingId, approve } = await c.req.json(); // adminUserId ไม่รับจาก client แล้ว ใช้ตัวจริงจาก token
   const { data: booking } = await sb.from("bookings").select("*, customers(line_user_id)").eq("id", bookingId).single();
   if (!booking) return c.json({ error: "not found" }, 404);
+  if (booking.tenant_id !== admin.tenantId) return c.json({ error: "forbidden" }, 403); // กัน admin tenant อื่นอนุมัติข้าม tenant
 
   await sb.from("payments").update({
     verification_status: approve ? "manual_verified" : "rejected",
-    verified_by: adminUserId, verified_at: new Date().toISOString(),
+    verified_by: admin.userId, verified_at: new Date().toISOString(),
   }).eq("booking_id", bookingId);
 
   if (approve) await markPaidAndReceipt(booking);
@@ -450,13 +472,17 @@ app.post("/api/driver/complete", async (c) => {
 // 8) Admin endpoints
 // =============================================================
 app.post("/api/admin/dispatch", async (c) => {
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: "unauthorized" }, 401);
+
   const { bookingId, driverId } = await c.req.json();
   if (!bookingId || !driverId) return c.json({ error: "ข้อมูลไม่ครบ" }, 400);
-  const { data: bk } = await sb.from("bookings").select("status, customers(line_user_id)").eq("id", bookingId).single();
+  const { data: bk } = await sb.from("bookings").select("status, tenant_id, customers(line_user_id)").eq("id", bookingId).single();
   if (!bk) return c.json({ error: "ไม่พบการจอง" }, 404);
+  if (bk.tenant_id !== admin.tenantId) return c.json({ error: "forbidden" }, 403);
   if (bk.status !== "paid" && bk.status !== "confirmed") return c.json({ error: `จ่ายงานไม่ได้ (สถานะ: ${bk.status})` }, 409);
 
-  const { data: drv } = await sb.from("drivers").select("name, vehicle_plate").eq("id", driverId).single();
+  const { data: drv } = await sb.from("drivers").select("name, vehicle_plate").eq("id", driverId).eq("tenant_id", admin.tenantId).single();
   if (!drv) return c.json({ error: "ไม่พบคนขับ" }, 404);
 
   await sb.from("bookings").update({ driver_id: driverId, status: "dispatched" }).eq("id", bookingId);
@@ -467,10 +493,14 @@ app.post("/api/admin/dispatch", async (c) => {
 });
 
 app.post("/api/admin/cancel", async (c) => {
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: "unauthorized" }, 401);
+
   const { bookingId, reason } = await c.req.json();
   if (!bookingId) return c.json({ error: "ไม่พบรหัสการจอง" }, 400);
-  const { data: bk } = await sb.from("bookings").select("driver_id, customers(line_user_id)").eq("id", bookingId).single();
+  const { data: bk } = await sb.from("bookings").select("driver_id, tenant_id, customers(line_user_id)").eq("id", bookingId).single();
   if (!bk) return c.json({ error: "ไม่พบการจอง" }, 404);
+  if (bk.tenant_id !== admin.tenantId) return c.json({ error: "forbidden" }, 403);
   await sb.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
   if (bk.driver_id) await sb.from("drivers").update({ status: "available" }).eq("id", bk.driver_id);
   const uid = (bk as any).customers?.line_user_id;
