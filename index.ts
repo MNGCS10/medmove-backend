@@ -227,6 +227,12 @@ async function handlePostback(ev: any) {
   if (!booking) return;
 
   if (action === "confirm") {
+    // กันกดปุ่ม "ยืนยันจอง" เก่าที่ค้างอยู่ในแชท (booking ถูกยืนยัน/ยกเลิกไปแล้ว)
+    // ไม่งั้นจะส่ง QR ใหม่ซ้ำให้ booking ที่ไม่ใช่ใบล่าสุด สร้างความสับสนเรื่องยอดเงิน
+    if (booking.status !== "pending_confirm") {
+      await lineReply(ev.replyToken, [{ type: "text", text: `การจอง #${bookingId.slice(0, 8)} ถูกดำเนินการไปแล้ว (สถานะ: ${booking.status}) กรุณาใช้การ์ดล่าสุดที่ได้รับหากต้องการจองใหม่ครับ` }]);
+      return;
+    }
     await sb.from("bookings").update({ status: "awaiting_payment" }).eq("id", bookingId);
 
     // เช็คว่า tenant เปิด PromptPay ไว้ไหม (ตั้งผ่าน admin.html → ตั้งค่า)
@@ -251,6 +257,11 @@ async function handlePostback(ev: any) {
   }
 
   if (action === "cancel") {
+    // กันกดปุ่ม "ยกเลิก" เก่าที่ค้างอยู่ในแชท ไปยกเลิก booking ที่จ่ายเงิน/จ่ายงานไปแล้วโดยไม่ตั้งใจ
+    if (!["pending_confirm", "awaiting_payment"].includes(booking.status)) {
+      await lineReply(ev.replyToken, [{ type: "text", text: `การจอง #${bookingId.slice(0, 8)} ดำเนินการไปแล้ว (สถานะ: ${booking.status}) ยกเลิกด้วยวิธีนี้ไม่ได้แล้ว กรุณาติดต่อเจ้าหน้าที่ครับ` }]);
+      return;
+    }
     await sb.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
     await lineReply(ev.replyToken, [{ type: "text", text: "ยกเลิกการจองแล้ว" }]);
   }
