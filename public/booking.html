@@ -407,6 +407,15 @@
         const p = await liff.getProfile();
         state.profile = { userId: p.userId, displayName: p.displayName, pictureUrl: p.pictureUrl };
       } catch (err) {
+        // DEV_USER fallback อนุญาตเฉพาะ localhost/127.0.0.1 หรือ ?dev=1 เท่านั้น
+        // กันเคส production URL โหลดนอก LINE แล้วได้ userId ปลอมร่วมกันทุกคน (ข้อมูลชนกัน/สวมรอยจองแทนกัน)
+        const isDevAllowed = ["localhost", "127.0.0.1"].includes(location.hostname)
+          || new URLSearchParams(location.search).get("dev") === "1";
+        if (!isDevAllowed) {
+          console.error("LIFF init failed ใน production — ปฏิเสธการจอง", err);
+          document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif">เปิดหน้านี้ผ่าน LINE เท่านั้น<br>กรุณาเปิดผ่านเมนู MedMove ใน LINE OA</div>';
+          throw err;
+        }
         console.warn("LIFF init failed (dev mode?)", err);
         state.profile = { userId: "DEV_USER", displayName: "ทดสอบ", pictureUrl: "" };
       }
