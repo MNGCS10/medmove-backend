@@ -52,6 +52,13 @@ async function requireAdmin(c: any): Promise<{ userId: string; tenantId: string 
 
 const app = new Hono();
 
+// ---------- API usage logging (ต้นทุน Google Maps ต่อ tenant) ----------
+// best-effort: ไม่ await/ไม่ block response ถ้า insert fail — ไม่ให้กระทบ flow หลัก
+function logApiUsage(tenantId: string, apiType: string, bookingId?: string) {
+  sb.from("api_usage_log").insert({ tenant_id: tenantId, api_type: apiType, booking_id: bookingId ?? null })
+    .then(({ error }) => { if (error) console.warn("logApiUsage failed", apiType, error.message); });
+}
+
 app.use("*", cors({
   origin: ["https://medmove-liff.pages.dev"],
   allowMethods: ["GET", "POST", "OPTIONS"],
@@ -136,6 +143,11 @@ app.post("/api/bookings", async (c) => {
   if (bErr) return c.json({ error: bErr.message }, 500);
 
   const mapUrl = staticRouteMapUrl(b.origin.lat, b.origin.lng, b.destination.lat, b.destination.lng, GOOGLE_MAPS_STATIC_KEY);
+  logApiUsage(b.tenantId, "static_map", booking.id);
+  // proxy สำหรับ Places Autocomplete + Geocoder ที่ booking.html เรียกฝั่ง client (backend เห็นไม่ได้ตรงๆ)
+  // นับ 1 booking = ~1 session ของทั้งสอง SKU นั้น เพื่อประมาณต้นทุนได้ ไม่ใช่ตัวเลขเป๊ะ 100%
+  logApiUsage(b.tenantId, "places_autocomplete_proxy", booking.id);
+  logApiUsage(b.tenantId, "geocode_proxy", booking.id);
   await linePush(b.lineUserId, [flex("ยืนยันการจอง", flexConfirmBooking({
     bookingId: booking.id, mapUrl,
     originAddress: b.origin.address, destAddress: b.destination.address,
@@ -362,6 +374,7 @@ app.post("/api/track", async (c) => {
 
 async function notifyTracking(bk: any, lat: number, lng: number, stage: "approaching" | "near" | "arrived") {
   const mapUrl = staticRouteMapUrl(lat, lng, bk.origin_lat, bk.origin_lng, GOOGLE_MAPS_STATIC_KEY);
+  logApiUsage(bk.tenant_id, "static_map", bk.id);
   await linePush(bk.customers.line_user_id, [flex("รถกำลังมารับ", flexTracking({
     mapUrl, driverName: bk.drivers?.name ?? "คนขับ", vehiclePlate: bk.drivers?.vehicle_plate ?? "-",
     etaText: stage === "near" ? "ไม่เกิน 5 นาที" : "ประมาณ 10-15 นาที",
