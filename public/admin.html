@@ -458,7 +458,8 @@
     function cardHtml(b) {
       const pendingSlip = (b.payments || []).find((p) => p.verification_status === "pending");
       let acts = "";
-      if (b.status === "awaiting_payment" && pendingSlip) acts = `<button class="btn btn-ok" data-act="slip" data-id="${b.id}">🧾 ตรวจสลิป</button>`;
+      if (b.status === "awaiting_payment" && !b.payment_link_sent) acts = `<button class="btn btn-primary" data-act="sendqr" data-id="${b.id}">💸 ส่ง QR ชำระเงิน</button>`;
+      else if (b.status === "awaiting_payment" && pendingSlip) acts = `<button class="btn btn-ok" data-act="slip" data-id="${b.id}">🧾 ตรวจสลิป</button>`;
       else if (b.status === "paid") acts = `<button class="btn btn-primary" data-act="dispatch" data-id="${b.id}">🚗 จ่ายงาน</button>`;
       else if (["dispatched", "en_route", "arrived"].includes(b.status)) acts = `<button class="btn btn-ghost" data-act="map" data-id="${b.id}">🗺️ ดูแผนที่</button>`;
       const canCancel = !["completed", "cancelled", "rejected"].includes(b.status);
@@ -491,6 +492,7 @@
           if (act === "slip") openSlip(b);
           else if (act === "dispatch") openDispatch(b);
           else if (act === "cancel") cancelBooking(b);
+          else if (act === "sendqr") sendPaymentQr(b);
           else if (act === "map") { switchView("map"); if (b.drivers) toast(`คนขับ: ${b.drivers.name}`); }
         };
       });
@@ -561,6 +563,20 @@
       } catch (e) { toast("ยกเลิกไม่สำเร็จ"); }
     }
 
+    // ---------- Send payment QR (booking ล่วงหน้าที่ยังไม่ส่ง QR) ----------
+    async function sendPaymentQr(b) {
+      if (!confirm(`ส่ง QR ชำระเงินให้ #${b.id.slice(0,8)} ยอด ${baht(b.price_calculated)} บาทตอนนี้เลยไหม?`)) return;
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/send-payment-qr`, {
+          method: "POST", headers: await authHeaders(),
+          body: JSON.stringify({ bookingId: b.id }),
+        });
+        if (!res.ok) throw new Error();
+        toast("ส่ง QR ให้ลูกค้าแล้ว");
+        loadBookings();
+      } catch (e) { toast("ส่ง QR ไม่สำเร็จ"); }
+    }
+
     // ---------- Drivers ----------
     function renderDrivers() {
       if (!app.drivers.length) { $("driverList").innerHTML = `<div class="empty">ยังไม่มีคนขับ</div>`; return; }
@@ -571,8 +587,25 @@
           <div class="info"><b>${d.name}</b><small>${d.vehicle_plate || "-"} · ${d.vehicle_type || "ปกติ"} · ${d.phone || ""}</small></div>
           <span class="dstatus d-${d.status}">${TH[d.status] || d.status}</span>
           <button class="btn btn-ghost" style="margin-left:8px;padding:7px 10px;font-size:12.5px" onclick="showDriverLink('${d.id}','${(d.name || "").replace(/'/g, "\\'")}')">🔗 ลิงก์</button>
+          ${d.status === "on_trip" ? `<button class="btn btn-danger" style="margin-left:8px;padding:7px 10px;font-size:12.5px" onclick="forceReleaseDriver('${d.id}','${(d.name || "").replace(/'/g, "\\'")}')">⚠️ ปลดสถานะ</button>` : ""}
         </div>`).join("");
     }
+
+    // คนขับไม่ตอบสนอง (ลืมกดปิดงาน/ปิดเครื่อง/ไม่ยอมทำงาน) -> admin กดปลดสถานะเองทันที
+    // ไม่ต้องรอ auto-timeout 4 ชม. + ดึง booking ที่ค้างอยู่กลับไปคิว "รอจ่ายงาน" ให้จ่ายคนอื่นต่อได้เลย
+    window.forceReleaseDriver = async function (driverId, name) {
+      if (!confirm(`ปลดสถานะ "${name}" กลับเป็นว่าง?\n\nใช้เมื่อคนขับไม่ตอบสนอง/ลืมกดปิดงาน — งานที่ค้างอยู่จะถูกดึงกลับไปที่คิว "รอจ่ายงาน" ให้จ่ายคนอื่นแทนได้`)) return;
+      try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/api/admin/force-release-driver`, {
+          method: "POST", headers: await authHeaders(),
+          body: JSON.stringify({ driverId }),
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        toast(data.releasedBookingId ? "ปลดสถานะแล้ว งานถูกดึงกลับเข้าคิว" : "ปลดสถานะแล้ว");
+        loadDrivers(); loadBookings();
+      } catch (e) { toast("ปลดสถานะไม่สำเร็จ"); }
+    };
 
     // ---------- Add driver + personal link ----------
     $("addDriverBtn").addEventListener("click", () => openModal("addDriverModal"));
