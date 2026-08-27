@@ -219,6 +219,28 @@ async function handleEvent(ev: any) {
   if (ev.type === "message" && ev.message.type === "image") return handleSlip(ev);
 }
 
+// ส่ง QR/คำขอชำระเงินให้ลูกค้า — แยกเป็น function ใช้ร่วมกันระหว่าง
+// ตอนลูกค้ากด "ยืนยันจอง" (booking ทันที) กับตอน admin กดส่งเองทีหลัง (booking ล่วงหน้า)
+async function sendPaymentRequest(booking: any, lineUserId: string) {
+  const ppEnabled = await isPromptPayEnabled(booking.tenant_id);
+  if (ppEnabled) {
+    const promptpayId = await getPromptPayId(booking.tenant_id);
+    const qrImageUrl = await buildPromptPayQrUrl(
+      { tenantId: booking.tenant_id, promptpayId }, booking.price_calculated, booking.id,
+    );
+    await linePush(lineUserId, [flex("ชำระเงิน", flexPaymentRequest({
+      bookingId: booking.id, qrImageUrl, amount: booking.price_calculated,
+      accountName: "MedMove", accountNo: promptpayId, bankName: "PromptPay",
+      liffUploadUrl: LIFF_UPLOAD_URL,
+    }))]);
+  } else {
+    await linePush(lineUserId, [flex("ชำระเงิน", flexPaymentRequestManual({
+      bookingId: booking.id, amount: booking.price_calculated, liffUploadUrl: LIFF_UPLOAD_URL,
+    }))]);
+  }
+  await sb.from("bookings").update({ payment_link_sent: true }).eq("id", booking.id);
+}
+
 async function handlePostback(ev: any) {
   const params = new URLSearchParams(ev.postback.data);
   const action = params.get("action");
@@ -235,25 +257,15 @@ async function handlePostback(ev: any) {
     }
     await sb.from("bookings").update({ status: "awaiting_payment" }).eq("id", bookingId);
 
-    // เช็คว่า tenant เปิด PromptPay ไว้ไหม (ตั้งผ่าน admin.html → ตั้งค่า)
-    // ปิดไว้ -> ข้าม QR ไปเลย ให้ลูกค้าแนบสลิปตรง แอดมิน verify มือ (ไม่บล็อกการจอง)
-    const ppEnabled = await isPromptPayEnabled(booking.tenant_id);
-    if (ppEnabled) {
-      const promptpayId = await getPromptPayId(booking.tenant_id);
-      const qrImageUrl = await buildPromptPayQrUrl(
-        { tenantId: booking.tenant_id, promptpayId }, booking.price_calculated, bookingId,
-      );
-      await linePush(ev.source.userId, [flex("ชำระเงิน", flexPaymentRequest({
-        bookingId, qrImageUrl, amount: booking.price_calculated,
-        accountName: "MedMove", accountNo: promptpayId, bankName: "PromptPay",
-        liffUploadUrl: LIFF_UPLOAD_URL,
-      }))]);
+    // booking ล่วงหน้า (มี scheduled_at) -> ยังไม่ส่ง QR ตอนนี้ กันเคสนัดถูกเลื่อน/ยกเลิกจากบุคคลที่ 3
+    // (เช่น หมอไม่ว่าง) แล้วดันเก็บเงินไปก่อนแล้ว ให้ admin เป็นคนกดส่ง QR เองทีหลังใกล้ถึงเวลานัดแทน
+    // booking ทันที (ไม่มี scheduled_at) -> ส่ง QR ทันทีเหมือนเดิม ไม่มีความเสี่ยงเรื่องเลื่อนนัด
+    if (booking.scheduled_at) {
+      await linePush(ev.source.userId, [{ type: "text", text: `✅ รับการจองล่วงหน้าเรียบร้อยครับ (${bkkTime(booking.scheduled_at)})\nระบบจะส่งลิงก์ชำระเงินให้ใกล้ถึงเวลานัดหมาย ไม่ต้องชำระตอนนี้` }]);
     } else {
-      await linePush(ev.source.userId, [flex("ชำระเงิน", flexPaymentRequestManual({
-        bookingId, amount: booking.price_calculated, liffUploadUrl: LIFF_UPLOAD_URL,
-      }))]);
+      await sendPaymentRequest(booking, ev.source.userId);
     }
-    await linePush(ADMIN_LINE_TARGET, [{ type: "text", text: `✅ ลูกค้ายืนยันจอง #${bookingId.slice(0, 8)} รอชำระเงิน` }]);
+    await linePush(ADMIN_LINE_TARGET, [{ type: "text", text: `✅ ลูกค้ายืนยันจอง #${bookingId.slice(0, 8)} รอชำระเงิน${booking.scheduled_at ? " (จองล่วงหน้า — ยังไม่ส่ง QR)" : ""}` }]);
   }
 
   if (action === "cancel") {
@@ -530,6 +542,54 @@ app.post("/api/admin/cancel", async (c) => {
   const uid = (bk as any).customers?.line_user_id;
   if (uid) await linePush(uid, [{ type: "text", text: `การจองถูกยกเลิก${reason ? `\nเหตุผล: ${reason}` : ""}\nหากมีข้อสงสัยติดต่อเจ้าหน้าที่ได้เลยครับ` }]);
   return c.json({ ok: true });
+});
+
+// booking ล่วงหน้าที่ admin ยังไม่ได้ส่ง QR (payment_link_sent=false) -> กดส่งเองตอนใกล้ถึงเวลานัด
+app.post("/api/admin/send-payment-qr", async (c) => {
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: "unauthorized" }, 401);
+
+  const { bookingId } = await c.req.json();
+  if (!bookingId) return c.json({ error: "ไม่พบรหัสการจอง" }, 400);
+  const { data: bk } = await sb.from("bookings").select("*, customers(line_user_id)").eq("id", bookingId).single();
+  if (!bk) return c.json({ error: "ไม่พบการจอง" }, 404);
+  if (bk.tenant_id !== admin.tenantId) return c.json({ error: "forbidden" }, 403);
+  if (bk.status !== "awaiting_payment") return c.json({ error: `ส่ง QR ไม่ได้ (สถานะ: ${bk.status})` }, 409);
+  const uid = (bk as any).customers?.line_user_id;
+  if (!uid) return c.json({ error: "ไม่พบ LINE ของลูกค้า" }, 404);
+  await sendPaymentRequest(bk, uid);
+  return c.json({ ok: true });
+});
+
+// คนขับไม่ตอบสนอง (ลืมกดปิดงาน/ปิดเครื่อง/ไม่ยอมทำงาน) -> admin ปลดสถานะคืนเป็นว่าง
+// ทันที ไม่ต้องรอ auto-timeout 4 ชม. + ดึง booking กลับไปคิว "รอจ่ายงาน" ให้จ่ายคนอื่นต่อได้
+app.post("/api/admin/force-release-driver", async (c) => {
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: "unauthorized" }, 401);
+
+  const { driverId } = await c.req.json();
+  if (!driverId) return c.json({ error: "ไม่พบรหัสคนขับ" }, 400);
+  const { data: drv } = await sb.from("drivers").select("*").eq("id", driverId).eq("tenant_id", admin.tenantId).single();
+  if (!drv) return c.json({ error: "ไม่พบคนขับ" }, 404);
+
+  const { data: activeBooking } = await sb.from("bookings")
+    .select("*, customers(line_user_id)")
+    .eq("driver_id", driverId).in("status", ["dispatched", "en_route", "arrived"])
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+  await sb.from("drivers").update({ status: "available" }).eq("id", driverId);
+
+  if (activeBooking) {
+    await sb.from("bookings").update({ status: "paid", driver_id: null }).eq("id", activeBooking.id);
+    await sb.from("booking_events").insert({
+      tenant_id: admin.tenantId, booking_id: activeBooking.id, event_type: "admin_override",
+      from_status: activeBooking.status, to_status: "paid", actor: `admin:${admin.userId}`,
+      detail: { reason: "force_release_driver — คนขับไม่ตอบสนอง admin ปลดสถานะและดึง booking กลับคิว" },
+    });
+    const uid = (activeBooking as any).customers?.line_user_id;
+    if (uid) await linePush(uid, [{ type: "text", text: "ขออภัยครับ กำลังจัดหาคนขับใหม่ให้ เดี๋ยวแจ้งกลับอีกครั้งนะครับ 🙏" }]);
+  }
+  return c.json({ ok: true, releasedBookingId: activeBooking?.id ?? null });
 });
 
 app.get("/health", (c) => c.text("ok"));
