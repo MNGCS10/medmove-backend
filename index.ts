@@ -484,6 +484,15 @@ app.get("/api/driver/active", async (c) => {
   })));
 });
 
+app.post("/api/driver/start", async (c) => {
+  const { bookingId } = await c.req.json();
+  const { data: bk } = await sb.from("bookings").select("status").eq("id", bookingId).single();
+  if (!bk) return c.json({ error: "ไม่พบการจอง" }, 404);
+  if (bk.status !== "dispatched") return c.json({ ok: true, status: bk.status, note: "ข้ามการอัปเดต — สถานะไม่ใช่ dispatched แล้ว" });
+  await sb.from("bookings").update({ status: "en_route" }).eq("id", bookingId);
+  return c.json({ ok: true, status: "en_route" });
+});
+
 app.post("/api/driver/arrived", async (c) => {
   const { bookingId } = await c.req.json();
   const { data: bk } = await sb.from("bookings").select("customers(line_user_id)").eq("id", bookingId).single();

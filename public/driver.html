@@ -152,13 +152,21 @@
     }
 
     // ---------- GPS tracking (reuse pattern จากไฟล์ GPS เดิม) ----------
-    function startTracking(bookingId) {
+    async function startTracking(bookingId) {
       if (!navigator.geolocation) return toast("อุปกรณ์ไม่รองรับ GPS");
       track.bookingId = bookingId; track.pointCount = 0; track.distanceKm = 0; track.lastKept = null;
       localStorage.setItem("mm_activeBooking", bookingId);
       track.watchId = navigator.geolocation.watchPosition(onPosition, onGeoError, {
         enableHighAccuracy: true, maximumAge: 5000, timeout: 15000,
       });
+      // แจ้ง backend ทันทีว่าออกเดินทางแล้ว (dispatched -> en_route) โดยไม่รอ geofence
+      // กัน bug: กด "ถึงจุดรับแล้ว" ก่อน GPS เข้าใกล้จุดรับ แล้วสถานะกระโดดข้าม en_route ไป arrived เลย
+      try {
+        await fetch(`${CONFIG.BACKEND_URL}/api/driver/start`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId }),
+        });
+      } catch (e) { /* ไม่ block การส่ง GPS ถ้า start call ล้มเหลว */ }
       toast("เริ่มส่งตำแหน่งแล้ว");
       loadJobs();
     }
